@@ -179,3 +179,15 @@ def test_ui_binds_to_localhost_only(monkeypatch: pytest.MonkeyPatch) -> None:
     app, kwargs = calls[0]
     assert app == "gridagent.web.api:app"
     assert kwargs["host"] == "127.0.0.1" and kwargs["port"] == 8600
+
+
+def test_ui_host_option_warns_when_not_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("uvicorn")
+    import uvicorn
+
+    calls = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append(kwargs))
+    result = runner.invoke(cli.app, ["ui", "--host", "0.0.0.0"])
+    assert result.exit_code == 0
+    assert calls[0]["host"] == "0.0.0.0"
+    assert "reachable from other machines" in result.output

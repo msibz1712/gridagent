@@ -1,0 +1,20 @@
+# One command for the website:  docker compose up --build   ->  http://localhost:8000
+services:
+  gridagent:
+    build: .
+    image: gridagent:latest
+    env_file:
+      - path: .env          # ANTHROPIC_API_KEY (never baked into the image)
+        required: false     # without it the site starts and shows "not available"
+    environment:
+      GARDEN_UI_BUDGET_USD: "1.00"
+    ports:
+      - "127.0.0.1:8000:8000"   # reachable from this machine only
+    volumes:
+      - ./logs:/app/logs         # run logs survive container restarts
+      - ./reports:/app/reports
+      - gridagent-cache:/app/.cache
+    restart: unless-stopped
+
+volumes:
+  gridagent-cache:

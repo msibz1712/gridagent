@@ -408,6 +408,13 @@ def runs(
 @app.command()
 def ui(
     port: Annotated[int, typer.Option(help="Port for the local web server")] = 8000,
+    host: Annotated[
+        str,
+        typer.Option(
+            help="Interface to listen on. Keep 127.0.0.1 on your machine; use 0.0.0.0 only "
+            "inside a container whose port is published to 127.0.0.1 on the host."
+        ),
+    ] = "127.0.0.1",
 ) -> None:
     """Start the web app at http://localhost:<port> (needs: uv sync --extra web)."""
     if importlib.util.find_spec("fastapi") is None or importlib.util.find_spec("uvicorn") is None:
@@ -418,7 +425,11 @@ def ui(
         raise typer.Exit(code=1)
     import uvicorn
 
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        # The app can spend API credit: only expose it where the network is controlled.
+        console.print(
+            f"[yellow]Listening on {host}: reachable from other machines unless a container "
+            "or firewall restricts it.[/]"
+        )
     console.print(f"GridAgent: open http://localhost:{port} in your browser (Ctrl+C to stop)")
-    # 127.0.0.1 only: the app can spend API credit, so it must not be reachable
-    # from other machines on the network.
-    uvicorn.run("gridagent.web.api:app", host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run("gridagent.web.api:app", host=host, port=port, log_level="warning")

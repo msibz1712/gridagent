@@ -6,6 +6,9 @@ registry with an evaluation harness.
 
 > Work in progress. Full documentation arrives in milestone M6.
 
+CI runs on every push (`.github/workflows/ci.yml`): lint, format, offline tests, config
+validation, oracle evals for every agent version, and a Docker build with smoke tests.
+
 ## Quick start
 
 ```bash
@@ -73,3 +76,19 @@ uv run garden compare energy_qa@0.1.0 energy_qa@0.2.0              # version vs 
 
 Eval sets live in `agents/<name>/evals.yaml`; evals always use the fixture data and a
 fixed "today", so results are reproducible. Reports (Markdown + JSON) go to `reports/`.
+
+## Docker
+
+```bash
+docker compose up --build                 # website on http://localhost:8000 (reads .env if present)
+
+docker build -t gridagent .
+docker run --rm --env-file .env -p 127.0.0.1:8000:8000 gridagent   # website
+docker run --rm gridagent eval energy_qa --oracle                  # any garden command
+docker run --rm gridagent list
+```
+
+Multi-stage image built from `uv.lock` (exact versions), without dev tools, running as a
+non-root user, with a health check on `/api/health`. The API key is never part of the
+image: it is passed at run time. The port is published to `127.0.0.1` only, because the
+website can spend API credit. Logs and reports are mounted from the host in `compose.yaml`.

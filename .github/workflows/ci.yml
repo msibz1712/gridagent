@@ -1,0 +1,93 @@
+# CI: everything runs offline (recorded data, scripted/oracle model), so it needs
+# no API key, costs nothing and gives the same result on every run.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, tests and offline evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies (exact versions from uv.lock)
+        run: uv sync --locked --extra web
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Tests (offline; live tests are skipped by default)
+        run: uv run pytest
+
+      - name: Validate agent configs
+        run: uv run garden validate
+
+      - name: Offline evals for every agent version (must pass 100%)
+        env:
+          GARDEN_REPORTS_DIR: reports
+        run: |
+          for version in $(ls agents/energy_qa | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$'); do
+            uv run garden eval "energy_qa@${version}" --oracle --min-pass-rate 1.0
+          done
+
+      - name: Keep eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: reports/
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker image builds and runs
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t gridagent:ci .
+
+      - name: CLI works in the container
+        run: |
+          docker run --rm gridagent:ci version
+          docker run --rm gridagent:ci validate
+          docker run --rm gridagent:ci eval energy_qa --oracle --min-pass-rate 1.0
+
+      - name: Website starts and answers the health check
+        run: |
+          docker run -d --name web -p 127.0.0.1:8000:8000 gridagent:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8000/api/health && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/api/health
+          curl -fsS http://127.0.0.1:8000/ | grep -q "<title>GridAgent"
+          # Without an API key the site must say so instead of failing.
+          curl -fsS http://127.0.0.1:8000/api/config | grep -q '"available":false'
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs web || true

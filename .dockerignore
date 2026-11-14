@@ -1,0 +1,21 @@
+# Never send secrets or local state into the image build.
+.env
+.env.*
+!.env.example
+.git
+.venv
+.cache
+logs
+reports
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.github
+.vscode
+.idea
+.DS_Store
+dist
+build
+# Recordings may be large; agents/ is copied without them.
+agents/**/recordings
