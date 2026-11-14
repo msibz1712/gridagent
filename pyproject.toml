@@ -1,0 +1,49 @@
+[project]
+name = "gridagent"
+version = "0.1.0"
+description = "An evaluated AI agent that answers questions about Germany's electricity system, plus a mini Agent Garden registry."
+readme = "README.md"
+authors = [
+    { name = "msibz1712", email = "206462282+msibz1712@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=2.8.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.14.3",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
+    "typer>=0.29.1",
+]
+
+# `uv run garden ...` calls the Typer app defined in src/gridagent/cli.py
+[project.scripts]
+garden = "gridagent.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.20,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]
+
+# ---------- ruff: linter + formatter ----------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/W = pycodestyle, F = pyflakes (unused imports, undefined names),
+# I = import sorting, B = bugbear (likely bugs), UP = modern Python syntax
+select = ["E", "W", "F", "I", "B", "UP"]
+
+# ---------- pytest ----------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "live: test calls real external APIs (skipped by default, never run in CI)",
+]

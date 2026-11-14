@@ -1,0 +1,28 @@
+# Secrets
+.env
+
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# Local data cache for API responses (fixtures in tests/fixtures ARE committed)
+.cache/
+
+# Run logs and generated eval reports (keep the folders)
+logs/*
+!logs/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
