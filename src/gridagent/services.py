@@ -1,10 +1,12 @@
-"""Application services shared by the CLI and the web UI.
+"""Application services shared by the CLI and the web app.
 
-Keeping this logic here (not in the UI file) means it is written once and
-tested without Streamlit; the UI only handles layout and user input.
+Keeping this logic here (not in the web layer) means it is written once and
+tested on its own; the web API only translates HTTP to these functions.
 """
 
 import json
+import math
+import threading
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -15,8 +17,10 @@ from gridagent.agent.config import AgentConfig, LoadedAgent
 from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import RunLog, append_run_log
 from gridagent.data.cache import ResponseCache
-from gridagent.data.client import EnergyChartsClient
+from gridagent.data.client import EnergyChartsClient, EnergyChartsError
 from gridagent.data.fixture_source import DataProvider, FixtureDataSource
+from gridagent.data.models import Series
+from gridagent.data.sources import source_series
 from gridagent.evals.dataset import EvalCase
 from gridagent.evals.offline import oracle_llm
 from gridagent.evals.report import load_report
@@ -172,18 +176,101 @@ def load_reports(paths: list[Path]) -> dict[str, EvalReport]:
 # ---------- spending guard ----------
 
 
-class Budget(BaseModel):
-    """A simple per-session spending limit for live model calls."""
+class Budget:
+    """A spending limit for live model calls (per web-server process).
 
-    limit_usd: float
-    spent_usd: float = 0.0
+    A lock makes it safe when several requests run at the same time.
+    """
+
+    def __init__(self, limit_usd: float) -> None:
+        self.limit_usd = limit_usd
+        self.spent_usd = 0.0
+        self._lock = threading.Lock()
 
     @property
     def remaining_usd(self) -> float:
         return max(self.limit_usd - self.spent_usd, 0.0)
 
     def allows_another_call(self, worst_case_usd: float) -> bool:
-        return self.spent_usd + worst_case_usd <= self.limit_usd
+        with self._lock:
+            return self.spent_usd + worst_case_usd <= self.limit_usd
 
     def add(self, cost_usd: float | None) -> None:
-        self.spent_usd += cost_usd or 0.0
+        with self._lock:
+            self.spent_usd += cost_usd or 0.0
+
+
+# ---------- charts of the data behind an answer ----------
+
+MAX_CHART_POINTS = 400
+MAX_CHARTS = 3
+
+
+class ChartPoint(BaseModel):
+    t: str  # ISO timestamp (start of the bucket, local time)
+    v: float | None
+
+
+class Chart(BaseModel):
+    title: str
+    unit: str
+    period: str
+    points: list[ChartPoint]
+
+
+def downsample(series: Series, max_points: int = MAX_CHART_POINTS) -> list[ChartPoint]:
+    """Average consecutive values so a month of 15-minute data fits in a chart."""
+    size = max(1, math.ceil(len(series.points) / max_points))
+    points = []
+    for i in range(0, len(series.points), size):
+        bucket = series.points[i : i + size]
+        values = [p.value for p in bucket if p.value is not None]
+        mean = sum(values) / len(values) if values else None
+        points.append(ChartPoint(t=bucket[0].timestamp.isoformat(), v=mean))
+    return points
+
+
+def charts_for_run(log: RunLog, data: DataProvider) -> list[Chart]:
+    """Re-create the series the agent analysed, for plotting next to the answer.
+
+    The ToolBox numbers refs in the order of successful fetches (gen_1,
+    price_2, ...), so we replay that numbering from the logged tool calls.
+    """
+    fetches: dict[str, tuple[str, date, date]] = {}
+    counter = 0
+    wanted: list[tuple[str, str]] = []
+    for call in log.tool_calls:
+        if call.is_error:
+            continue
+        if call.name in ("get_generation", "get_day_ahead_price"):
+            counter += 1
+            prefix = "gen" if call.name == "get_generation" else "price"
+            start = date.fromisoformat(call.input["start"])
+            end = date.fromisoformat(call.input["end"])
+            fetches[f"{prefix}_{counter}"] = (prefix, start, end)
+        elif call.name == "compute_stats":
+            pair = (call.input.get("ref", ""), call.input.get("source") or "day_ahead_price")
+            if pair not in wanted:
+                wanted.append(pair)
+
+    charts = []
+    for ref, source in wanted[:MAX_CHARTS]:
+        if ref not in fetches:
+            continue
+        kind, start, end = fetches[ref]
+        try:
+            if kind == "price":
+                response = data.day_ahead_price(start, end)
+                series = response.get_series("day_ahead_price")
+                title = "Day-ahead price (DE-LU)"
+            else:
+                response = data.public_power(start, end)
+                series = source_series(response, source)
+                title = f"Generation: {source.replace('_', ' ')}"
+        except (EnergyChartsError, KeyError, ValueError):
+            continue  # a chart is a nice-to-have; never fail the answer for it
+        charts.append(
+            Chart(title=title, unit=series.unit, period=f"{start} to {end}",
+                  points=downsample(series))
+        )  # fmt: skip
+    return charts

@@ -165,16 +165,17 @@ def test_ui_explains_missing_extra(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
     result = runner.invoke(cli.app, ["ui"])
     assert result.exit_code == 1
-    assert "--extra ui" in result.output
+    assert "--extra web" in result.output
 
 
 def test_ui_binds_to_localhost_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("uvicorn")
+    import uvicorn
+
     calls = []
-    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: object())
-    monkeypatch.setattr(cli.subprocess, "call", lambda cmd: calls.append(cmd) or 0)
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append((app, kwargs)))
     result = runner.invoke(cli.app, ["ui", "--port", "8600"])
-    assert result.exit_code == 0
-    command = calls[0]
-    assert command[command.index("--server.address") + 1] == "localhost"
-    assert command[command.index("--server.port") + 1] == "8600"
-    assert command[command.index("--browser.gatherUsageStats") + 1] == "false"
+    assert result.exit_code == 0, result.output
+    app, kwargs = calls[0]
+    assert app == "gridagent.web.api:app"
+    assert kwargs["host"] == "127.0.0.1" and kwargs["port"] == 8600

@@ -12,8 +12,6 @@ environment variables (useful in Docker):
 import importlib.util
 import json
 import os
-import subprocess
-import sys
 from datetime import date
 from pathlib import Path
 from typing import Annotated
@@ -375,24 +373,18 @@ def compare_command(
 
 @app.command()
 def ui(
-    port: Annotated[int, typer.Option(help="Port for the local web server")] = 8501,
+    port: Annotated[int, typer.Option(help="Port for the local web server")] = 8000,
 ) -> None:
-    """Start the web UI at http://localhost:<port> (needs: uv sync --extra ui)."""
-    if importlib.util.find_spec("streamlit") is None:
+    """Start the web app at http://localhost:<port> (needs: uv sync --extra web)."""
+    if importlib.util.find_spec("fastapi") is None or importlib.util.find_spec("uvicorn") is None:
         console.print(
-            "[red]The UI needs the optional 'ui' extra.[/] Install it with:\n"
-            "  uv sync --extra ui    (then: uv run --extra ui garden ui)"
+            "[red]The web app needs the optional 'web' extra.[/] Install it with:\n"
+            "  uv sync --extra web    (then: uv run --extra web garden ui)"
         )
         raise typer.Exit(code=1)
-    app_path = Path(__file__).parent / "ui" / "app.py"
-    command = [
-        sys.executable, "-m", "streamlit", "run", str(app_path),
-        # Listen on localhost only: the UI can spend API credit, so it must not be
-        # reachable from other machines on the network.
-        "--server.address", "localhost",
-        "--server.port", str(port),
-        "--browser.gatherUsageStats", "false",  # no telemetry to Streamlit
-        "--server.headless", "true",  # no first-run email prompt; works in Docker too
-    ]  # fmt: skip
-    console.print(f"GridAgent UI: open http://localhost:{port} in your browser (Ctrl+C to stop)")
-    raise typer.Exit(code=subprocess.call(command))
+    import uvicorn
+
+    console.print(f"GridAgent: open http://localhost:{port} in your browser (Ctrl+C to stop)")
+    # 127.0.0.1 only: the app can spend API credit, so it must not be reachable
+    # from other machines on the network.
+    uvicorn.run("gridagent.web.api:app", host="127.0.0.1", port=port, log_level="warning")
