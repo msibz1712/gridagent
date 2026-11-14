@@ -41,6 +41,20 @@ uv run garden run energy_qa@0.1.0 "..."   # pin a version
 Layout: `agents/<name>/README.md` plus one folder per semantic version,
 `agents/<name>/<version>/{agent.yaml, system_prompt.md}`.
 
+## Web UI
+
+```bash
+uv sync --extra ui                         # optional extra: installs Streamlit
+set -a && source .env && set +a            # only needed for live questions
+uv run --extra ui garden ui                # then open http://localhost:8501
+```
+
+Tabs: **Ask** (live model, or a free oracle demo with no API cost), **Run history**
+(monitoring over `logs/runs.jsonl`), **Evaluations** (view and compare reports, run a
+free offline eval) and **Agent Garden** (registry and agent READMEs). The server
+listens on localhost only and has a per-session spending limit
+(`GARDEN_UI_BUDGET_USD`, default $1.00).
+
 ## Evaluations
 
 ```bash

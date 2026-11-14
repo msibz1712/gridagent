@@ -37,7 +37,7 @@ def test_run_end_to_end_with_fake_model(monkeypatch: pytest.MonkeyPatch, tmp_pat
             [text("Average 161.73 EUR/MWh on 2026-11-13. Source: SMARD.de via Energy-Charts.info")],
         ]
     )
-    monkeypatch.setattr(cli, "ClaudeLLM", lambda **kwargs: fake)
+    monkeypatch.setattr(cli, "build_llm", lambda cfg, model=None: fake)
 
     result = runner.invoke(
         cli.app,
@@ -159,3 +159,22 @@ def test_compare_two_versions_offline(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert result.exit_code == 0, result.output
     assert "Broken in B: none" in result.output
     assert len(list(tmp_path.glob("compare_*.md"))) == 1
+
+
+def test_ui_explains_missing_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
+    result = runner.invoke(cli.app, ["ui"])
+    assert result.exit_code == 1
+    assert "--extra ui" in result.output
+
+
+def test_ui_binds_to_localhost_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(cli.subprocess, "call", lambda cmd: calls.append(cmd) or 0)
+    result = runner.invoke(cli.app, ["ui", "--port", "8600"])
+    assert result.exit_code == 0
+    command = calls[0]
+    assert command[command.index("--server.address") + 1] == "localhost"
+    assert command[command.index("--server.port") + 1] == "8600"
+    assert command[command.index("--browser.gatherUsageStats") + 1] == "false"

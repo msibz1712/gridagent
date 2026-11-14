@@ -1,6 +1,6 @@
 """Command-line interface for the Agent Garden (`garden`).
 
-Commands: `list`, `tools`, `validate`, `new`, `run`, `eval`, `compare`, `version`.
+Commands: `list`, `tools`, `validate`, `new`, `run`, `eval`, `compare`, `ui`, `version`.
 
 Paths are relative to the current directory and can be overridden with
 environment variables (useful in Docker):
@@ -9,8 +9,11 @@ environment variables (useful in Docker):
   GARDEN_CACHE_DIR (default: .cache/energy_charts)
 """
 
+import importlib.util
 import json
 import os
+import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Annotated
@@ -24,9 +27,7 @@ from gridagent import __version__
 from gridagent.agent.config import AgentConfigError
 from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import RunLog, append_run_log
-from gridagent.data.cache import ResponseCache
-from gridagent.data.client import EnergyChartsClient, berlin_today
-from gridagent.data.fixture_source import DataProvider, FixtureDataSource
+from gridagent.data.client import berlin_today
 from gridagent.evals.report import (
     METRIC_ROWS,
     compare,
@@ -39,7 +40,7 @@ from gridagent.evals.runner import CaseResult, EvalReport, estimate_live_cost
 from gridagent.evals.session import choose_offline_mode, evaluate, load_agent_eval_set
 from gridagent.garden.registry import discover, resolve
 from gridagent.garden.scaffold import create_agent
-from gridagent.llm.claude import ClaudeLLM
+from gridagent.services import build_data, build_llm
 from gridagent.tools.definitions import ALL_TOOLS
 
 app = typer.Typer(
@@ -187,21 +188,8 @@ def run(
         raise typer.Exit(code=1) from exc
 
     cfg = loaded.config
-    llm = ClaudeLLM(
-        model_name=model or cfg.model.name,
-        max_tokens=cfg.model.max_tokens,
-        effort=cfg.model.effort,
-        refusal_fallback=cfg.model.refusal_fallback,
-        timeout_seconds=cfg.limits.model_timeout_seconds,
-        max_retries=cfg.limits.model_max_retries,
-    )
-    data: DataProvider = (
-        FixtureDataSource(FIXTURE_DIR)
-        if fixtures
-        else EnergyChartsClient(
-            cache=ResponseCache(_path("GARDEN_CACHE_DIR", ".cache/energy_charts"))
-        )
-    )
+    llm = build_llm(cfg, model)
+    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache/energy_charts"))
     fixed_today = date.fromisoformat(today) if today else None
 
     with console.status(f"Running {cfg.name} {cfg.version} on {llm.model_name}..."):
@@ -383,3 +371,28 @@ def compare_command(
     out = out_dir / f"compare_{stamp}.md"
     out.write_text(comparison_markdown(result))
     console.print(f"Comparison: {out}")
+
+
+@app.command()
+def ui(
+    port: Annotated[int, typer.Option(help="Port for the local web server")] = 8501,
+) -> None:
+    """Start the web UI at http://localhost:<port> (needs: uv sync --extra ui)."""
+    if importlib.util.find_spec("streamlit") is None:
+        console.print(
+            "[red]The UI needs the optional 'ui' extra.[/] Install it with:\n"
+            "  uv sync --extra ui    (then: uv run --extra ui garden ui)"
+        )
+        raise typer.Exit(code=1)
+    app_path = Path(__file__).parent / "ui" / "app.py"
+    command = [
+        sys.executable, "-m", "streamlit", "run", str(app_path),
+        # Listen on localhost only: the UI can spend API credit, so it must not be
+        # reachable from other machines on the network.
+        "--server.address", "localhost",
+        "--server.port", str(port),
+        "--browser.gatherUsageStats", "false",  # no telemetry to Streamlit
+        "--server.headless", "true",  # no first-run email prompt; works in Docker too
+    ]  # fmt: skip
+    console.print(f"GridAgent UI: open http://localhost:{port} in your browser (Ctrl+C to stop)")
+    raise typer.Exit(code=subprocess.call(command))

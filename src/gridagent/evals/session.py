@@ -19,8 +19,8 @@ from gridagent.evals.offline import (
 )
 from gridagent.evals.runner import CaseResult, EvalReport, Mode, run_eval
 from gridagent.llm.base import LLM, LLMError
-from gridagent.llm.claude import ClaudeLLM
 from gridagent.llm.fake import FakeLLM
+from gridagent.services import build_llm
 
 
 def load_agent_eval_set(agent: LoadedAgent) -> tuple[EvalSet, str]:
@@ -54,16 +54,7 @@ def evaluate(
     if mode == "live":
 
         def llm_for_case(case: EvalCase) -> LLM:
-            return RecordingLLM(
-                ClaudeLLM(
-                    model_name=model,
-                    max_tokens=cfg.model.max_tokens,
-                    effort=cfg.model.effort,
-                    refusal_fallback=cfg.model.refusal_fallback,
-                    timeout_seconds=cfg.limits.model_timeout_seconds,
-                    max_retries=cfg.limits.model_max_retries,
-                )
-            )
+            return RecordingLLM(build_llm(cfg, model))
 
         def after_case(case: EvalCase, log: RunLog, llm: LLM) -> RunLog:
             if recording is not None and isinstance(llm, RecordingLLM):
