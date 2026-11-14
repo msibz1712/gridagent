@@ -1,11 +1,12 @@
 """Command-line interface for the Agent Garden (`garden`).
 
-Commands so far: `version`, `run`. Later milestones add
-`list`, `new` (M3), `eval` and `compare` (M4).
+Commands: `list`, `tools`, `validate`, `new`, `run`, `version`.
+M4 adds `eval` and `compare`.
 
 Paths are relative to the current directory and can be overridden with
 environment variables (useful in Docker):
-  GARDEN_AGENTS_DIR (default: agents), GARDEN_LOG_DIR (default: logs),
+  GARDEN_AGENTS_DIR (default: agents), GARDEN_TEMPLATE_DIR (default:
+  templates/agent_template), GARDEN_LOG_DIR (default: logs),
   GARDEN_CACHE_DIR (default: .cache/energy_charts)
 """
 
@@ -21,13 +22,16 @@ from rich.panel import Panel
 from rich.table import Table
 
 from gridagent import __version__
-from gridagent.agent.config import load_agent
+from gridagent.agent.config import AgentConfigError
 from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import RunLog, append_run_log
 from gridagent.data.cache import ResponseCache
 from gridagent.data.client import EnergyChartsClient, berlin_today
 from gridagent.data.fixture_source import DataProvider, FixtureDataSource
+from gridagent.garden.registry import discover, resolve
+from gridagent.garden.scaffold import create_agent
 from gridagent.llm.claude import ClaudeLLM
+from gridagent.tools.definitions import ALL_TOOLS
 
 app = typer.Typer(
     help="Agent Garden: list, run, evaluate and scaffold agents.", no_args_is_help=True
@@ -39,6 +43,10 @@ FIXTURE_DIR = Path("tests/fixtures")
 
 def _path(env_var: str, default: str) -> Path:
     return Path(os.environ.get(env_var, default))
+
+
+def _agents_dir() -> Path:
+    return _path("GARDEN_AGENTS_DIR", "agents")
 
 
 @app.callback()
@@ -53,9 +61,103 @@ def version() -> None:
     console.print(f"gridagent [bold green]{__version__}[/]")
 
 
+@app.command("list")
+def list_agents() -> None:
+    """Show registered agents, their versions and whether each config is valid."""
+    entries = discover(_agents_dir())
+    if not entries:
+        console.print(f"No agents in {_agents_dir()}. Create one with: garden new <name>")
+        return
+    table = Table(title=f"Agent Garden ({_agents_dir()})")
+    for column in ("agent", "versions", "latest", "model", "tools", "owner", "status"):
+        table.add_column(column)
+    for entry in entries:
+        latest = entry.versions[-1] if entry.versions else None
+        agent = latest.agent if latest else None
+        bad = [v.version for v in entry.versions if v.error]
+        if not entry.versions:
+            status = "[red]no versions[/]"
+        elif bad:
+            status = f"[red]invalid: {', '.join(bad)}[/]"
+        else:
+            status = "[green]valid[/]" + ("" if entry.has_readme else " [yellow](no README)[/]")
+        table.add_row(
+            entry.name,
+            ", ".join(v.version for v in entry.versions),
+            latest.version if latest else "-",
+            agent.config.model.name if agent else "-",
+            ", ".join(agent.config.tools) if agent else "-",
+            agent.config.owner if agent else "-",
+            status,
+        )
+    console.print(table)
+
+
+@app.command()
+def tools() -> None:
+    """Show the tools agents can use."""
+    table = Table(title="Available tools", show_lines=True)
+    table.add_column("tool")
+    table.add_column("description")
+    for name, definition in ALL_TOOLS.items():
+        table.add_row(name, definition["description"])
+    console.print(table)
+
+
+@app.command()
+def validate(
+    agent: Annotated[str | None, typer.Argument(help="Only this agent (default: all)")] = None,
+) -> None:
+    """Validate agent configs. Exits with code 1 if any is invalid (use in CI)."""
+    entries = [e for e in discover(_agents_dir()) if agent is None or e.name == agent]
+    if agent and not entries:
+        console.print(f"[red]No agent '{agent}' in {_agents_dir()}[/]")
+        raise typer.Exit(code=1)
+    failures = 0
+    for entry in entries:
+        if not entry.versions:
+            failures += 1
+            console.print(f"[red]FAIL[/] {entry.name}: no version folders")
+        if not entry.has_readme:
+            failures += 1
+            console.print(f"[red]FAIL[/] {entry.name}: README.md missing")
+        for v in entry.versions:
+            if v.error:
+                failures += 1
+                console.print(f"[red]FAIL[/] {entry.name}@{v.version}\n{v.error}")
+            else:
+                console.print(f"[green]ok[/]   {entry.name}@{v.version}")
+    if failures:
+        console.print(f"[red]{failures} problem(s) found[/]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def new(
+    name: Annotated[str, typer.Argument(help="snake_case name for the new agent")],
+    owner: Annotated[str, typer.Option(prompt=True, help="Who is responsible for it")],
+    description: Annotated[str, typer.Option(prompt=True, help="One sentence: what does it do?")],
+) -> None:
+    """Create a new agent from the template (agents/<name>/0.1.0/)."""
+    template_dir = _path("GARDEN_TEMPLATE_DIR", "templates/agent_template")
+    try:
+        created = create_agent(_agents_dir(), template_dir, name, owner, description)
+    except AgentConfigError as exc:
+        console.print(f"[red]Could not create agent:[/]\n{exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Created {created.spec}[/] in {created.directory}")
+    console.print(
+        "Next steps:\n"
+        f"  1. Edit {created.directory / 'system_prompt.md'} and agent.yaml (tools, model)\n"
+        f"  2. Describe it in {created.directory.parent / 'README.md'}\n"
+        f"  3. garden validate {name}\n"
+        f'  4. garden run {name} "What was the average day-ahead price yesterday?"'
+    )
+
+
 @app.command()
 def run(
-    agent: Annotated[str, typer.Argument(help="Agent name, e.g. energy_qa")],
+    agent: Annotated[str, typer.Argument(help="Agent, e.g. energy_qa or energy_qa@0.1.0")],
     question: Annotated[str, typer.Argument(help="The question to ask")],
     model: Annotated[str | None, typer.Option(help="Override the model from agent.yaml")] = None,
     fixtures: Annotated[
@@ -75,9 +177,9 @@ def run(
         raise typer.Exit(code=1)
 
     try:
-        loaded = load_agent(_path("GARDEN_AGENTS_DIR", "agents"), agent)
-    except (FileNotFoundError, ValueError) as exc:
-        console.print(f"[red]Could not load agent '{agent}':[/] {exc}")
+        loaded = resolve(_agents_dir(), agent)
+    except AgentConfigError as exc:
+        console.print(f"[red]Could not load agent '{agent}':[/]\n{exc}")
         raise typer.Exit(code=1) from exc
 
     cfg = loaded.config

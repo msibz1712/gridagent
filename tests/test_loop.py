@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from gridagent.agent.config import load_agent
 from gridagent.agent.loop import FAILURE_ANSWER, REFUSAL_ANSWER, Agent, build_user_message
 from gridagent.agent.runlog import RunLog, append_run_log
 from gridagent.data.fixture_source import FixtureDataSource
+from gridagent.garden.registry import resolve
 from gridagent.llm.base import LLMError, ModelResponse, TokenUsage
 from gridagent.llm.fake import FakeLLM, text, tool_use
 
@@ -27,7 +27,7 @@ MEAN_CALL = tool_use(
 
 
 def make_agent(llm: FakeLLM, **limits) -> Agent:
-    loaded = load_agent(AGENTS_DIR, "energy_qa")
+    loaded = resolve(AGENTS_DIR, "energy_qa")
     if limits:
         loaded.config.limits = loaded.config.limits.model_copy(update=limits)
     return Agent(loaded, llm, FixtureDataSource(FIXTURE_DIR), today=lambda: TODAY)
@@ -124,7 +124,7 @@ def test_model_error_is_logged_not_raised() -> None:
 
 def test_run_timeout() -> None:
     times = iter([0.0, 0.0, 1.0, 1.0, 1.0, 999.0, 999.0, 999.0])
-    loaded = load_agent(AGENTS_DIR, "energy_qa")
+    loaded = resolve(AGENTS_DIR, "energy_qa")
     agent = Agent(
         loaded,
         FakeLLM([[PRICE_CALL]] * 5),

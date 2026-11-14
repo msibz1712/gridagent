@@ -27,3 +27,16 @@ uv run garden run energy_qa "When was solar highest in October 2026?" --fixtures
 ```
 
 Every run is appended as one JSON line to `logs/runs.jsonl`.
+
+## Agent Garden
+
+```bash
+uv run garden list                 # registered agents, versions, model, owner, status
+uv run garden validate             # check every agent.yaml (exit code 1 if invalid)
+uv run garden tools                # tools agents can use
+uv run garden new my_agent         # scaffold agents/my_agent/0.1.0 from the template
+uv run garden run energy_qa@0.1.0 "..."   # pin a version
+```
+
+Layout: `agents/<name>/README.md` plus one folder per semantic version,
+`agents/<name>/<version>/{agent.yaml, system_prompt.md}`.

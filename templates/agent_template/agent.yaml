@@ -1,0 +1,19 @@
+name: $name
+version: 0.1.0
+description: $description_yaml
+owner: $owner_yaml
+model:
+  name: claude-sonnet-5-5
+  max_tokens: 16000
+  effort: medium
+  refusal_fallback: true
+# Tools this agent may call (see `garden tools`). Keep the list minimal.
+tools:
+  - get_day_ahead_price
+  - compute_stats
+limits:
+  max_steps: 8
+  model_timeout_seconds: 60
+  model_max_retries: 2
+  run_timeout_seconds: 180
+system_prompt_file: system_prompt.md

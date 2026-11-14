@@ -49,3 +49,48 @@ def test_run_end_to_end_with_fake_model(monkeypatch: pytest.MonkeyPatch, tmp_pat
     log = json.loads((tmp_path / "runs.jsonl").read_text().splitlines()[0])
     assert log["today"] == "2026-11-14"
     assert log["status"] == "ok"
+
+
+def test_list_shows_energy_qa(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(ROOT)
+    result = runner.invoke(cli.app, ["list"], terminal_width=200)
+    assert result.exit_code == 0
+    assert "energy_qa" in result.output and "0.1.0" in result.output and "valid" in result.output
+
+
+def test_validate_passes_for_repository_agents(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(ROOT)
+    result = runner.invoke(cli.app, ["validate"])
+    assert result.exit_code == 0, result.output
+    assert "ok" in result.output
+
+
+def test_validate_fails_with_exit_code_1(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    broken = tmp_path / "broken_agent" / "0.1.0"
+    broken.mkdir(parents=True)
+    (broken / "agent.yaml").write_text("name: broken_agent\nversion: 0.1.0\n")
+    monkeypatch.setenv("GARDEN_AGENTS_DIR", str(tmp_path))
+    result = runner.invoke(cli.app, ["validate"])
+    assert result.exit_code == 1
+    assert "FAIL" in result.output and "Field required" in result.output
+
+
+def test_new_then_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(ROOT)  # so the template is found
+    monkeypatch.setenv("GARDEN_AGENTS_DIR", str(tmp_path))
+    result = runner.invoke(
+        cli.app,
+        ["new", "price_bot", "--owner", "tests", "--description", "Answers price questions."],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Created price_bot@0.1.0" in result.output
+    listed = runner.invoke(cli.app, ["list"], terminal_width=200)
+    assert "price_bot" in listed.output
+
+
+def test_new_rejects_bad_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("GARDEN_AGENTS_DIR", str(tmp_path))
+    result = runner.invoke(cli.app, ["new", "Bad-Name", "--owner", "x", "--description", "y" * 20])
+    assert result.exit_code == 1
+    assert "snake_case" in result.output
