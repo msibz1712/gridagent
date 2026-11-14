@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from gridagent.data.reference import lookup
 from gridagent.evals.dataset import load_eval_set
 
 import independent_calc as ic
@@ -19,6 +20,16 @@ PRICE_YDAY = ic.rows("price_DE-LU_2026-11-13.json")
 PRICE_WEEK = ic.rows("price_DE-LU_2026-11-02_2026-11-08.json")
 PRICE_OCT = ic.rows("price_DE-LU_2026-10-01_2026-10-31.json")
 P = "day_ahead_price"
+CBPF = "cbpf_de_2026-11-02_2026-11-08.json"
+
+
+def _installed(year: str, column: str) -> float:
+    rows = ic.rows("installed_power_de_yearly.json")
+    return next(r for r in rows if r["timestamp"].startswith(year))["values"][column]
+
+
+def _reference(dataset: str, period: str) -> float:
+    return lookup(dataset, period)["values"][0]["value"]
 
 
 def daily_best(data, fn):
@@ -46,6 +57,31 @@ INDEPENDENT = {
     "wind_onshore_vs_offshore_last_week": lambda: ic.energy_mwh(GEN_WEEK, "wind_onshore") / 1000,
     "load_mean_last_week": lambda: ic.mean(GEN_WEEK, "load"),
     "ambiguous_october_no_year": lambda: ic.mean(PRICE_OCT, P),
+    # ---- Stage 1 (0.3.0) ----
+    "net_imports_physical_last_week": lambda: ic.flow_energy_gwh(CBPF, "sum"),
+    "physical_vs_commercial_imports": lambda: ic.flow_energy_gwh(CBPF, "sum"),
+    "poland_exchange_last_week": lambda: -ic.flow_energy_gwh(CBPF, "poland"),
+    "regional_solar_tennet": lambda: sum(ic.smard_week(4068, "TenneT")) / 1000,
+    "regional_wind_largest_area": lambda: max(
+        sum(ic.smard_week(4067, r)) / 1000 for r in ("50Hertz", "Amprion", "TenneT", "TransnetBW")
+    ),
+    "capacity_factor_wind_onshore_october": lambda: (
+        100 * ic.energy_mwh(GEN_OCT, "wind_onshore") / (71.336 * 1000 * len(GEN_OCT) * 0.25)
+    ),
+    "installed_solar_vs_2030_target": lambda: _installed("2026", "solar_ac"),
+    "negative_price_hours_october": lambda: (
+        sum(r["values"]["day_ahead_price"] < 0 for r in PRICE_OCT) * 0.25
+    ),
+    "hours_above_300_october": lambda: (
+        sum(r["values"]["day_ahead_price"] > 300 for r in PRICE_OCT) * 0.25
+    ),
+    "solar_market_value_october": lambda: ic.capture_price(GEN_OCT, PRICE_OCT, "solar"),
+    "renewable_share_total_scope": lambda: ic.share_pct(
+        ic.rows("total_power_de_2026-11-02_2026-11-08.json"), "renewable"
+    ),
+    # Published figures: checked against the curated reference file instead.
+    "co2_factor_2025": lambda: _reference("co2_intensity_electricity_mix", "2025"),
+    "official_renewable_share_2025": lambda: _reference("renewable_share_gross_generation", "2025"),
     "ambiguous_last_weekend": lambda: (
         ic.energy_mwh(ic.between(GEN_WEEK, "2026-11-07", "2026-11-08"), "wind") / 1000
     ),
@@ -56,7 +92,10 @@ NUMERIC_CASES = [c for c in eval_set.cases if c.numbers]
 
 
 def test_eval_set_size_and_coverage() -> None:
-    assert 20 <= len(eval_set.cases) <= 30
+    # The spec asked for 20-30 core questions; Stage 1 adds 13 for the new data sources.
+    core = [c for c in eval_set.cases if c.min_version is None]
+    assert 20 <= len(core) <= 30
+    assert len(eval_set.cases) <= 45
     categories = {c.category for c in eval_set.cases}
     assert {"factual", "tool_use", "ambiguous", "missing_data", "future", "refusal"} <= categories
 
@@ -72,8 +111,22 @@ def test_expected_number_matches_independent_calculation(case) -> None:
     assert expected == pytest.approx(INDEPENDENT[case.id](), rel=5e-4, abs=0.01)
 
 
-def test_second_number_onshore_offshore() -> None:
-    case = next(c for c in eval_set.cases if c.id == "wind_onshore_vs_offshore_last_week")
-    assert case.numbers[1].values[0] == pytest.approx(
-        ic.energy_mwh(GEN_WEEK, "wind_offshore") / 1000, abs=0.05
-    )
+# Cases with a second expected number: check that one independently too.
+SECOND_NUMBERS = {
+    "wind_onshore_vs_offshore_last_week": lambda: ic.energy_mwh(GEN_WEEK, "wind_offshore") / 1000,
+    "physical_vs_commercial_imports": lambda: ic.flow_energy_gwh(
+        "cbet_de_2026-11-02_2026-11-08.json", "sum"
+    ),
+    "installed_solar_vs_2030_target": lambda: _installed("2030", "solar_planned_eeg_2023"),
+    "solar_market_value_october": lambda: next(
+        v["value"]
+        for v in lookup("market_value_monthly", "2026-10")["values"]
+        if v["key"] == "solar"
+    ),
+}
+
+
+@pytest.mark.parametrize("case_id", sorted(SECOND_NUMBERS))
+def test_second_expected_numbers(case_id: str) -> None:
+    case = next(c for c in eval_set.cases if c.id == case_id)
+    assert case.numbers[1].values[0] == pytest.approx(SECOND_NUMBERS[case_id](), rel=5e-4, abs=0.05)

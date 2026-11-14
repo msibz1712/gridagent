@@ -32,8 +32,9 @@
         <div class="wrap narrow">
           <p class="eyebrow">Germany's electricity system</p>
           <h1>Ask a question. Get an answer you can cite.</h1>
-          <p class="lead">Generation by source, electricity demand and day-ahead prices, calculated from
-            public Energy-Charts data, with the period and sources stated for every answer.</p>
+          <p class="lead">Generation, demand, prices and market values, cross-border flows, control areas and
+            installed capacity, calculated from public data and set against official statistics, with the
+            period, definition and sources stated for every answer.</p>
 
           <form class="search" id="ask-form" autocomplete="off">
             <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -71,17 +72,21 @@
           <div class="card">
             <h3>What you can ask</h3>
             <ul>
-              <li>Generation by source: solar, wind (onshore, offshore), biomass, hydropower, lignite, hard coal, gas and more</li>
-              <li>Shares, e.g. renewables in total generation or in demand</li>
-              <li>Electricity demand (load)</li>
-              <li>Day-ahead prices for the Germany–Luxembourg bidding zone, including highs, lows and daily averages</li>
+              <li>Generation by source and electricity demand, as public net generation or including industrial self-supply</li>
+              <li>Shares, e.g. renewables in generation or in demand</li>
+              <li>Day-ahead prices: averages, highs and lows, hours above or below a price, and market values (capture prices) of solar and wind</li>
+              <li>Cross-border flows with each neighbour, physical and commercial</li>
+              <li>The four transmission control areas: 50Hertz, Amprion, TenneT and TransnetBW</li>
+              <li>Installed capacity, the 2030 expansion targets and capacity factors</li>
+              <li>Official figures: CO₂ factor of the electricity mix, official renewable shares, EEG market values</li>
             </ul>
           </div>
           <div class="card">
             <h3>Data sources</h3>
             <ul>
               <li><a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts.info</a> by Fraunhofer ISE: public net electricity generation, 15-minute resolution (CC BY 4.0)</li>
-              <li><a href="https://www.smard.de" target="_blank" rel="noopener">SMARD.de</a> by Bundesnetzagentur: day-ahead prices, via Energy-Charts (CC BY 4.0)</li>
+              <li><a href="https://www.smard.de" target="_blank" rel="noopener">SMARD.de</a> by Bundesnetzagentur: day-ahead prices (via Energy-Charts) and data per control area (CC BY 4.0)</li>
+              <li>Official statistics, quoted with their status: <a href="https://www.umweltbundesamt.de" target="_blank" rel="noopener">Umweltbundesamt</a>, BDEW / AG Energiebilanzen, and the transmission system operators on <a href="https://www.netztransparenz.de" target="_blank" rel="noopener">netztransparenz.de</a></li>
             </ul>
           </div>
           <div class="card">
@@ -90,6 +95,9 @@
               <li>Every number is calculated from the retrieved data, never estimated</li>
               <li>Energy is the sum of 15-minute power values × 0.25 h</li>
               <li>Shares follow Energy-Charts' definition: public net generation, excluding pumped-storage output; 50% of waste counts as renewable</li>
+              <li>Market value (capture price) = day-ahead price weighted by the technology's generation, as in the EEG</li>
+              <li>Capacity factor = generation ÷ (installed capacity at the start of the period × hours)</li>
+              <li>Where an official figure exists, it is shown next to the calculated one with its definition and status</li>
               <li>Dates refer to German local time; “last week” means Monday to Sunday</li>
             </ul>
           </div>
@@ -97,6 +105,7 @@
             <h3>Limits</h3>
             <ul>
               <li>Germany only, historical data only: no forecasts</li>
+              <li>Control areas are grid regions, not federal states</li>
               <li>No investment, trading or tariff advice</li>
               <li>Recent data is preliminary and can be revised by the data provider</li>
               <li>At most about three months per question</li>

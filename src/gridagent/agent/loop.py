@@ -21,7 +21,7 @@ from typing import Any
 
 from gridagent.agent.config import LoadedAgent
 from gridagent.agent.runlog import RESULT_PREVIEW_CHARS, RunLog, StepLog, ToolCallLog
-from gridagent.data.fixture_source import DataProvider
+from gridagent.data.provider import DataProvider
 from gridagent.llm.base import LLM, LLMError, ModelResponse
 from gridagent.llm.pricing import estimate_cost_usd
 from gridagent.tools.toolbox import ToolBox

@@ -57,7 +57,10 @@ NO_DATA_PHRASES = (
     "hasn't happened",
     "not yet",
 )
-SOURCE_PHRASES = ("energy-charts", "smard", "fraunhofer")
+SOURCE_PHRASES = (
+    "energy-charts", "smard", "fraunhofer", "umweltbundesamt", "uba", "bdew",
+    "netztransparenz", "energiebilanzen",
+)  # fmt: skip
 MONTHS = [
     "january",
     "february",
@@ -148,13 +151,24 @@ def contains_any(text: str, phrases: tuple[str, ...] | list[str]) -> bool:
 
 
 def _same(expected: Any, actual: Any) -> bool:
+    """Equal values; for lists, the actual call must include every expected item."""
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            return False
+        return {str(e).lower() for e in expected} <= {str(a).lower() for a in actual}
     return str(expected).lower() == str(actual).lower()
+
+
+# Refs are internal ids that depend on fetch order, so they are never compared.
+IGNORED_ARGS = {"ref", "weight_ref"}
 
 
 def call_matches(expected: ExpectedToolCall, actual: dict[str, Any]) -> bool:
     if actual["name"] != expected.name:
         return False
-    return all(_same(v, actual["input"].get(k)) for k, v in expected.args.items())
+    return all(
+        _same(v, actual["input"].get(k)) for k, v in expected.args.items() if k not in IGNORED_ARGS
+    )
 
 
 def tool_calls_ok(expected: list[ExpectedToolCall], actual: list[dict[str, Any]]) -> bool:

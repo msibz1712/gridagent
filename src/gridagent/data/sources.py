@@ -22,6 +22,7 @@ NON_GENERATION_SERIES = frozenset(
         "renewable_share_of_generation",
         "cross_border_electricity_trading",
         "hydro_pumped_storage_consumption",
+        "load_incl_self_consumption",  # total_power's load (incl. industrial self-supply)
     }
 )
 
@@ -99,6 +100,9 @@ def source_series(response: TimeSeriesResponse, source: str) -> Series:
     if source not in SOURCE_GROUPS:
         raise KeyError(f"Unknown source '{source}'. Choose from: {', '.join(available_sources())}")
     weights = SOURCE_GROUPS[source]
+    if source == "load" and "load" not in response.series_ids():
+        # total_power reports demand including industrial self-consumption.
+        weights = {"load_incl_self_consumption": 1.0}
     components = {sid: response.get_series(sid) for sid in weights}
 
     points: list[Point] = []

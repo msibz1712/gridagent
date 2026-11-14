@@ -15,6 +15,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 # Energy-Charts definitions, written out again on purpose.
 TOTAL_EXCLUDES = {
+    "load_incl_self_consumption",
     "load",
     "residual_load",
     "renewable_share_of_load",
@@ -75,6 +76,23 @@ def by_day(data: list[dict]) -> dict[str, list[dict]]:
     for r in data:
         days[r["timestamp"][:10]].append(r)
     return dict(days)
+
+
+def smard_week(filter_id: int, region: str) -> list[float]:
+    """Raw SMARD values (MWh per quarter-hour) for the recorded week of 2 Nov 2026."""
+    path = FIXTURES / "smard" / f"{filter_id}_{region}_quarterhour_1793574000000.json"
+    return [v for _, v in json.loads(path.read_text())["series"]]
+
+
+def flow_energy_gwh(name: str, neighbour: str) -> float:
+    """Net energy of a cross-border series (GW, 15-minute values) in GWh."""
+    return sum(r["values"][neighbour] for r in rows(name)) * 0.25
+
+
+def capture_price(gen: list[dict], prices: list[dict], source: str) -> float:
+    weights = [value(r, source) for r in gen]
+    price = [r["values"]["day_ahead_price"] for r in prices]
+    return sum(w * p for w, p in zip(weights, price, strict=True)) / sum(weights)
 
 
 def between(data: list[dict], start: str, end: str) -> list[dict]:

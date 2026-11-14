@@ -21,29 +21,41 @@ from pydantic import BaseModel
 from gridagent.evals.dataset import EvalCase
 from gridagent.llm.base import LLM, ModelResponse, TokenUsage
 from gridagent.llm.fake import FakeLLM, text, tool_use
+from gridagent.tools.definitions import REF_PREFIX
 
 ORACLE_USAGE = TokenUsage()  # the oracle costs nothing
-STATS_DEFAULTS = {"source": None, "relative_to": None, "per_day": False}
+STATS_DEFAULTS = {
+    "source": None, "relative_to": None, "per_day": False,
+    "threshold": None, "weight_ref": None, "weight_source": None,
+}  # fmt: skip
 
 
 # ---------- oracle ----------
 
 
 def oracle_llm(case: EvalCase) -> FakeLLM:
-    """One tool call per turn (in eval-set order), then the reference answer."""
+    """One tool call per turn (in eval-set order), then the reference answer.
+
+    compute_stats gets the most recent ref unless the eval case names one; refs
+    are numbered like the ToolBox does (gen_1, price_2, ...) in fetch order.
+    """
     turns: list[list[dict[str, Any]]] = []
-    fetches = 0  # the ToolBox numbers refs gen_1, price_2, ... in fetch order
+    fetches = 0
     last_ref = None
     for i, call in enumerate(case.tool_calls, start=1):
         args = dict(call.args)
         if call.name == "compute_stats":
             args = {"ref": last_ref, **STATS_DEFAULTS, **args}
-        else:
+        elif call.name in REF_PREFIX:
             fetches += 1
-            prefix = "gen" if call.name == "get_generation" else "price"
-            last_ref = f"{prefix}_{fetches}"
+            last_ref = f"{REF_PREFIX[call.name]}_{fetches}"
             if call.name == "get_generation":
                 args.setdefault("sources", None)
+                args.setdefault("scope", None)
+        elif call.name == "get_installed_capacity":
+            args.setdefault("technologies", None)
+        elif call.name == "get_reference_statistics":
+            args.setdefault("period", None)
         turns.append([tool_use(call.name, args, tool_id=f"oracle_{i}")])
     turns.append([text(case.oracle_answer)])
     return FakeLLM(turns, model_name="oracle", usage=ORACLE_USAGE)

@@ -159,6 +159,11 @@ def compare(a: EvalReport, b: EvalReport) -> Comparison:
         warnings.append("Different eval set contents: results are not directly comparable.")
     if a.mode != b.mode:
         warnings.append(f"Different modes ({a.mode} vs {b.mode}).")
+    if {c.id for c in a.cases} != {c.id for c in b.cases}:
+        warnings.append(
+            "A and B were scored on different case sets (newer versions answer more "
+            "questions); metrics cover each report's own cases."
+        )
     if "oracle" in (a.mode, b.mode):
         warnings.append("Oracle mode does not measure model quality.")
 

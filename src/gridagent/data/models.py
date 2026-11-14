@@ -48,6 +48,7 @@ class TimeSeriesResponse(BaseModel):
     license: str | None = None
     country: str | None = None
     bidding_zone: str | None = None
+    attributes: dict[str, str] = {}  # endpoint-specific, e.g. sign_convention, time_step
     series: list[SeriesInfo]
     data: list[DataRow]
 

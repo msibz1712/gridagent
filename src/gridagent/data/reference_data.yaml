@@ -1,0 +1,103 @@
+# Official reference statistics for reconciliation notes.
+#
+# Curated by hand: every value was checked against the cited source on the date in
+# `checked`. Status: final | preliminary | estimate | reported (= reported by trade
+# press citing the official publisher; replace with the official value when available).
+# Definitions matter: these figures use different bases than Energy-Charts' public
+# net generation, which is exactly why the agent shows them side by side.
+
+datasets:
+  - id: co2_intensity_electricity_mix
+    title: CO2 emission factor of the German electricity mix
+    unit: g CO2/kWh
+    definition: >-
+      Direct CO2 emissions of German electricity generation divided by the electricity
+      consumed in Germany. Emissions caused abroad by net imports are not included.
+    source:
+      name: Umweltbundesamt (UBA), Climate Change 16/2026
+      url: https://www.umweltbundesamt.de/themen/co2-emissionen-pro-kilowattstunde-strom-2025-nur
+      published: "2026-03-23"
+    checked: "2026-11-14"
+    values:
+      - {period: "2023", value: 379, status: final}
+      - {period: "2024", value: 353, status: preliminary}
+      - {period: "2025", value: 344, status: estimate}
+
+  - id: renewable_share_gross_generation
+    title: Share of renewables in gross electricity generation
+    unit: "%"
+    definition: >-
+      Renewable generation as a share of gross electricity generation (Bruttostromerzeugung),
+      which includes power plants' own consumption and industrial generation. Higher than
+      shares of public net generation.
+    source:
+      name: BDEW, based on AG Energiebilanzen data (Stromerzeugung 2025, 8 Dec 2025)
+      url: https://www.bdew.de/media/documents/STRERZ_Jahr_2025_12_08_3.pdf
+      published: "2025-12-08"
+    checked: "2026-11-14"
+    values:
+      - {period: "2025", value: 57.9, status: preliminary}
+
+  - id: gross_electricity_generation
+    title: Gross electricity generation in Germany
+    unit: TWh
+    definition: Gross electricity generation (Bruttostromerzeugung), all producers.
+    source:
+      name: BDEW, based on AG Energiebilanzen data (Stromerzeugung 2025, 8 Dec 2025)
+      url: https://www.bdew.de/media/documents/STRERZ_Jahr_2025_12_08_3.pdf
+      published: "2025-12-08"
+    checked: "2026-11-14"
+    values:
+      - {period: "2025", value: 498.9, status: preliminary}
+
+  - id: renewable_share_gross_consumption
+    title: Share of renewables in gross electricity consumption
+    unit: "%"
+    definition: >-
+      Renewable generation as a share of gross electricity consumption (Bruttostromverbrauch).
+      This is the basis of Germany's legal renewable targets.
+    source:
+      name: Umweltbundesamt (UBA), Erneuerbare Energien in Zahlen
+      url: https://www.umweltbundesamt.de/node/12427
+      published: "2026"
+    checked: "2026-11-14"
+    values:
+      - {period: "2025", value: 55.1, status: preliminary}
+
+  - id: market_value_annual
+    title: Official annual market values (Jahresmarktwerte) under the EEG
+    unit: ct/kWh
+    definition: >-
+      Annual market value per technology computed by the transmission system operators
+      under Annex 1 Nr. 5.3 EEG: the spot price weighted by the technology's feed-in.
+      "spot_average" is the annual market value JW (average spot price).
+    source:
+      name: netztransparenz.de (German TSOs), Marktwertübersicht
+      url: https://www.netztransparenz.de/de-de/Erneuerbare-Energien-und-Umlagen/EEG/Transparenzanforderungen/Marktpr%C3%A4mie/Marktwert%C3%BCbersicht
+      published: "2026-01"
+    checked: "2026-11-14"
+    values:
+      - {period: "2025", key: spot_average, value: 8.932, status: final}
+      - {period: "2025", key: solar, value: 4.508, status: final}
+      - {period: "2025", key: wind_onshore, value: 7.441, status: final}
+      - {period: "2025", key: wind_offshore, value: 8.059, status: final}
+
+  - id: market_value_monthly
+    title: Official monthly market values (Monatsmarktwerte) under the EEG
+    unit: ct/kWh
+    definition: >-
+      Monthly market value per technology computed by the transmission system operators
+      under Annex 1 Nr. 5.2 EEG: the spot price weighted by the technology's feed-in,
+      based on the TSOs' extrapolation of feed-in. Small differences to a capture price
+      computed from Energy-Charts generation data are expected.
+    source:
+      name: netztransparenz.de (German TSOs); October 2026 as reported by pv magazine and Solarserver
+      url: https://www.solarserver.de/2026/11/10/monatsmarktwert-solar-im-oktober-stark-angestiegen/
+      published: "2026-11-10"
+    checked: "2026-11-14"
+    values:
+      - {period: "2026-10", key: solar, value: 13.39, status: reported}
+      - {period: "2026-10", key: wind_onshore, value: 12.202, status: reported}
+      - {period: "2026-10", key: wind_offshore, value: 14.562, status: reported}
+      - {period: "2026-10", key: spot_average, value: 16.93, status: reported}
+      - {period: "2026-05", key: solar, value: 3.296, status: final}

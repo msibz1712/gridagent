@@ -38,11 +38,12 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 EXAMPLES = [
     "What share of Germany's electricity came from wind last week?",
-    "What was the average day-ahead price yesterday?",
-    "When was solar generation highest last month?",
-    "Which day last week had the highest average electricity price?",
-    "How much of Germany's electricity was renewable last month?",
-    "Were there negative electricity prices last month?",
+    "What was the market value of solar power last month, compared with the official value?",
+    "How much electricity did Germany import on balance last week?",
+    "Which control area produced the most onshore wind last week?",
+    "How much solar capacity is installed, and what is the 2030 target?",
+    "For how many hours were electricity prices negative last month?",
+    "What was the CO2 intensity of German electricity in 2025?",
 ]
 FAILED_ANSWER = (
     "Sorry, I couldn't answer this question right now. Please try again in a moment, "
@@ -60,9 +61,7 @@ class Settings:
     )
     agents_dir: Path = field(default_factory=lambda: _env("GARDEN_AGENTS_DIR", "agents"))
     log_path: Path = field(default_factory=lambda: _env("GARDEN_LOG_DIR", "logs") / "runs.jsonl")
-    cache_dir: Path = field(
-        default_factory=lambda: _env("GARDEN_CACHE_DIR", ".cache/energy_charts")
-    )
+    cache_dir: Path = field(default_factory=lambda: _env("GARDEN_CACHE_DIR", ".cache"))
     fixture_dir: Path = field(default_factory=lambda: Path("tests/fixtures"))
     budget_usd: float = field(
         default_factory=lambda: float(os.environ.get("GARDEN_UI_BUDGET_USD", "1.00"))

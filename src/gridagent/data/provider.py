@@ -1,0 +1,68 @@
+"""The data interface the agent's tools use, and the live implementation.
+
+Two implementations share this interface:
+- `LiveDataSource`: Energy-Charts API + SMARD (real network, cached)
+- `FixtureDataSource` (fixture_source.py): recorded responses for offline tests/evals
+"""
+
+from datetime import date
+from pathlib import Path
+from typing import Protocol
+
+from gridagent.data.cache import ResponseCache
+from gridagent.data.client import EnergyChartsClient
+from gridagent.data.models import TimeSeriesResponse
+from gridagent.data.smard import SMARD_BASE_URL, SmardClient
+
+
+class DataProvider(Protocol):
+    """Everything the tools need from a data source."""
+
+    def public_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse: ...
+
+    def total_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse: ...
+
+    def day_ahead_price(self, start: date, end: date, bzn: str = "DE-LU") -> TimeSeriesResponse: ...
+
+    def cross_border(
+        self, start: date, end: date, kind: str = "physical"
+    ) -> TimeSeriesResponse: ...
+
+    def installed_power(self, time_step: str = "yearly") -> TimeSeriesResponse: ...
+
+    def regional(
+        self, region: str, sources: list[str], start: date, end: date
+    ) -> TimeSeriesResponse: ...
+
+
+class LiveDataSource:
+    """Energy-Charts for national data, SMARD for control areas. Both cached on disk."""
+
+    def __init__(self, cache_dir: Path) -> None:
+        self.energy_charts = EnergyChartsClient(cache=ResponseCache(cache_dir / "energy_charts"))
+        # SMARD serves static JSON files; the same HTTP client (cache, retries,
+        # Retry-After handling, 404 -> NoDataError) works for it unchanged.
+        smard_http = EnergyChartsClient(
+            cache=ResponseCache(cache_dir / "smard"), base_url=SMARD_BASE_URL
+        )
+        self.smard = SmardClient(get_json=lambda path, end: smard_http.get_json(path, {}, end))
+
+    def public_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse:
+        return self.energy_charts.public_power(start, end, country)
+
+    def total_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse:
+        return self.energy_charts.total_power(start, end, country)
+
+    def day_ahead_price(self, start: date, end: date, bzn: str = "DE-LU") -> TimeSeriesResponse:
+        return self.energy_charts.day_ahead_price(start, end, bzn)
+
+    def cross_border(self, start: date, end: date, kind: str = "physical") -> TimeSeriesResponse:
+        return self.energy_charts.cross_border(start, end, kind)
+
+    def installed_power(self, time_step: str = "yearly") -> TimeSeriesResponse:
+        return self.energy_charts.installed_power(time_step)
+
+    def regional(
+        self, region: str, sources: list[str], start: date, end: date
+    ) -> TimeSeriesResponse:
+        return self.smard.regional(region, sources, start, end)

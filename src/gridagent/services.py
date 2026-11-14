@@ -8,6 +8,7 @@ user needs (answer, period, sources, plain-language method, charts) without
 any agent or model vocabulary.
 """
 
+import json
 import math
 import threading
 from datetime import date
@@ -18,13 +19,14 @@ from pydantic import BaseModel
 from gridagent.agent.config import AgentConfig, LoadedAgent
 from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import RunLog, ToolCallLog, append_run_log
-from gridagent.data.cache import ResponseCache
-from gridagent.data.client import EnergyChartsClient, EnergyChartsError
-from gridagent.data.fixture_source import DataProvider, FixtureDataSource
+from gridagent.data.client import EnergyChartsError
+from gridagent.data.fixture_source import FixtureDataSource
 from gridagent.data.models import Series
-from gridagent.data.sources import source_series
+from gridagent.data.provider import DataProvider, LiveDataSource
 from gridagent.evals.runner import percentile
 from gridagent.llm.claude import ClaudeLLM
+from gridagent.tools.definitions import REF_PREFIX
+from gridagent.tools.toolbox import ToolBox, ToolInputError
 
 
 def build_llm(config: AgentConfig, model: str | None = None) -> ClaudeLLM:
@@ -40,10 +42,10 @@ def build_llm(config: AgentConfig, model: str | None = None) -> ClaudeLLM:
 
 
 def build_data(use_fixtures: bool, fixture_dir: Path, cache_dir: Path) -> DataProvider:
-    """Recorded fixtures (offline, reproducible) or the live Energy-Charts API (cached)."""
+    """Recorded fixtures (offline, reproducible) or live Energy-Charts + SMARD (cached)."""
     if use_fixtures:
         return FixtureDataSource(fixture_dir)
-    return EnergyChartsClient(cache=ResponseCache(cache_dir))
+    return LiveDataSource(cache_dir)
 
 
 def ask(
@@ -146,8 +148,12 @@ SOURCE_LABELS = {
     "renewable": "renewables",
     "waste": "waste",
     "others": "other sources",
+    "other_renewable": "other renewables",
+    "other_conventional": "other conventional sources",
     "load": "electricity demand (load)",
+    "residual_load": "residual load",
     "total": "total public net generation",
+    "sum": "all borders combined",
 }
 GENERATION_SOURCE = {
     "name": "Energy-Charts.info (Fraunhofer ISE)",
@@ -159,9 +165,29 @@ PRICE_SOURCE = {
     "url": "https://www.smard.de",
     "license": "CC BY 4.0",
 }
+SMARD_SOURCE = {
+    "name": "SMARD.de (Bundesnetzagentur), control-area data",
+    "url": "https://www.smard.de",
+    "license": "CC BY 4.0",
+}
+OPERATION_WORDS = {
+    "count_below": "Counted the hours below",
+    "count_above": "Counted the hours above",
+}
+
+
+COUNTRY_NAMES = {
+    "austria": "Austria", "belgium": "Belgium", "czech_republic": "the Czech Republic",
+    "denmark": "Denmark", "france": "France", "luxembourg": "Luxembourg",
+    "netherlands": "the Netherlands", "norway": "Norway", "poland": "Poland",
+    "sweden": "Sweden", "switzerland": "Switzerland",
+}  # fmt: skip
 
 
 def source_label(source: str | None) -> str:
+    """Readable name for a series id: 'wind_onshore' -> 'onshore wind', 'france' -> 'France'."""
+    if source in COUNTRY_NAMES:
+        return COUNTRY_NAMES[source]
     return SOURCE_LABELS.get(source or "", (source or "").replace("_", " "))
 
 
@@ -172,57 +198,124 @@ def format_period(start: str, end: str) -> str:
     return first if a == b else f"{first} – {b.day} {b:%b %Y}"
 
 
-def method_step(call: ToolCallLog) -> str:
-    """Describe one tool call the way a methods section would."""
+def _fetch_step(call: ToolCallLog) -> str:
     args = call.input
-    if call.name in ("get_generation", "get_day_ahead_price"):
-        what = (
-            "electricity generation and demand data for Germany"
-            if call.name == "get_generation"
-            else "day-ahead electricity prices (Germany–Luxembourg)"
+    period = format_period(args.get("start", ""), args.get("end", ""))
+    if call.name == "get_generation":
+        what = "electricity generation and demand data for Germany" + (
+            " including industrial self-supply" if args.get("scope") == "total" else ""
         )
-        period = format_period(args.get("start", ""), args.get("end", ""))
-        if call.is_error:
-            return f"Looked for {what} for {period}: no data available"
-        return f"Retrieved {what} in 15-minute resolution for {period}"
+    elif call.name == "get_day_ahead_price":
+        what = "day-ahead electricity prices (Germany–Luxembourg)"
+    elif call.name == "get_cross_border_flows":
+        kind = "physical" if args.get("kind") == "physical" else "scheduled commercial"
+        what = f"{kind} cross-border electricity flows between Germany and its neighbours"
+    else:  # get_regional_generation
+        sources = ", ".join(source_label(s) for s in args.get("sources", []))
+        what = f"{sources} data for the {args.get('region')} control area"
+    if call.is_error:
+        return f"Looked for {what} for {period}: no data available"
+    return f"Retrieved {what} in 15-minute resolution for {period}"  # fmt: skip
 
+
+def _stats_step(call: ToolCallLog, where: str = "") -> str:
+    """`where` names the data a ref came from, e.g. ' in the TenneT control area'."""
+    args = call.input
     subject = source_label(args.get("source")) if args.get("source") else "the price"
     per_day = " for each day" if args.get("per_day") else ""
     operation = args.get("operation")
     if operation == "share":
         whole = source_label(args.get("relative_to") or "total")
-        text = f"Calculated the share of {subject} in {whole}"
-    elif operation == "energy":
-        text = f"Calculated the total energy from {subject}{per_day}"
-    elif operation == "mean":
-        text = f"Calculated the average of {subject}{per_day}"
-    elif operation in ("max", "min"):
+        return f"Calculated the share of {subject} in {whole}"
+    if operation == "energy":
+        if args.get("source") in COUNTRY_NAMES or args.get("source") == "sum":
+            return f"Calculated the net energy exchanged with {subject}{per_day}"
+        return f"Calculated the total energy from {subject}{where}{per_day}"
+    if operation == "mean":
+        return f"Calculated the average of {subject}{per_day}"
+    if operation in ("max", "min"):
         word = "highest" if operation == "max" else "lowest"
-        text = f"Found the {word} value of {subject}{per_day} and when it occurred"
+        return f"Found the {word} value of {subject}{per_day} and when it occurred"
+    if operation in OPERATION_WORDS:
+        return f"{OPERATION_WORDS[operation]} {args.get('threshold')} for {subject}"
+    if operation == "capture_price":
+        weighted = source_label(args.get("weight_source"))
+        return f"Calculated the price weighted by {weighted} generation (market value)"
+    if operation == "capacity_factor":
+        return (f"Calculated the capacity factor of {subject} from generation and the "
+                "installed capacity at the start of the period")  # fmt: skip
+    return f"Calculated the {operation} of {subject}{per_day}"
+
+
+def method_step(call: ToolCallLog, where: str = "") -> str:
+    """Describe one tool call the way a methods section would."""
+    if call.name == "get_installed_capacity":
+        text = f"Looked up installed generation capacity ({call.input.get('time_step')} data)"
+    elif call.name == "get_reference_statistics":
+        text = _reference_step(call)
+    elif call.name == "compute_stats":
+        text = _stats_step(call, where)
     else:
-        text = f"Calculated the {operation} of {subject}{per_day}"
+        return _fetch_step(call)
     return text + (" (failed)" if call.is_error else "")
 
 
+def _reference_step(call: ToolCallLog) -> str:
+    try:
+        title = json.loads(call.result)["title"]
+    except (ValueError, KeyError, TypeError):
+        title = "an official statistic"
+    period = call.input.get("period")
+    return f"Looked up the official figure: {title}" + (f" ({period})" if period else "")
+
+
 def method_steps(log: RunLog) -> list[str]:
-    return [method_step(call) for call in log.tool_calls]
+    """All steps; calculations on regional data name their control area."""
+    region_of_ref: dict[str, str] = {}
+    fetches = 0
+    steps = []
+    for call in log.tool_calls:
+        if call.name in REF_PREFIX and not call.is_error:
+            fetches += 1  # the ToolBox numbers refs in this order (gen_1, region_2, ...)
+            if call.name == "get_regional_generation":
+                region_of_ref[f"region_{fetches}"] = call.input.get("region", "")
+        where = ""
+        if call.name == "compute_stats" and call.input.get("ref") in region_of_ref:
+            region = region_of_ref[call.input["ref"]]
+            where = " for Germany" if region == "DE" else f" in the {region} control area"
+        steps.append(method_step(call, where))
+    return steps
 
 
 def sources_for_run(log: RunLog) -> list[dict[str, str]]:
     """The data sources an answer is based on (only for successful data fetches)."""
-    names = {c.name for c in log.tool_calls if not c.is_error}
+    ok = [c for c in log.tool_calls if not c.is_error]
+    names = {c.name for c in ok}
     sources = []
-    if "get_generation" in names:
+    if names & {"get_generation", "get_cross_border_flows", "get_installed_capacity"}:
         sources.append(GENERATION_SOURCE)
     if "get_day_ahead_price" in names:
         sources.append(PRICE_SOURCE)
+    if "get_regional_generation" in names:
+        sources.append(SMARD_SOURCE)
+    for call in ok:
+        if call.name != "get_reference_statistics":
+            continue
+        try:
+            source = json.loads(call.result)["source"]
+        except (ValueError, KeyError, TypeError):
+            continue
+        entry = {"name": source["name"], "url": source["url"],
+                 "license": f"published {source['published']}"}  # fmt: skip
+        if entry not in sources:
+            sources.append(entry)
     return sources
 
 
 # ---------- charts of the data behind an answer ----------
 
 MAX_CHART_POINTS = 400
-MAX_CHARTS = 3
+MAX_CHARTS = 4
 
 
 class ChartPoint(BaseModel):
@@ -254,54 +347,61 @@ def bucket_size(series: Series, max_points: int = MAX_CHART_POINTS) -> int:
     return max(1, math.ceil(len(series.points) / max_points))
 
 
+def _chart_title(response_endpoint: str, source: str, region: str | None) -> str:
+    if response_endpoint == "price":
+        return "Day-ahead electricity price, Germany–Luxembourg"
+    if response_endpoint in ("cbpf", "cbet"):
+        kind = "physical" if response_endpoint == "cbpf" else "commercial"
+        return f"Net {kind} imports: {source_label(source)} (negative = export)"
+    label = source_label(source)
+    title = label[0].upper() + label[1:]
+    if source not in ("load", "total", "residual_load"):
+        title += " generation"
+    return f"{title}, {region} control area" if region else title
+
+
 def charts_for_run(log: RunLog, data: DataProvider) -> list[Chart]:
     """Re-create the series the agent analysed, for plotting next to the answer.
 
-    The ToolBox numbers refs in the order of successful fetches (gen_1,
-    price_2, ...), so we replay that numbering from the logged tool calls.
+    The logged data calls are replayed in a fresh ToolBox (served from cache),
+    which reproduces exactly the same refs; then each compute_stats call's
+    series is taken from that ToolBox.
     """
-    fetches: dict[str, tuple[str, date, date]] = {}
-    counter = 0
-    wanted: list[tuple[str, str]] = []
+    replay = ToolBox(data, today=lambda: date.fromisoformat(log.today))
+    wanted: list[tuple[str, str | None]] = []
     for call in log.tool_calls:
         if call.is_error:
             continue
-        if call.name in ("get_generation", "get_day_ahead_price"):
-            counter += 1
-            prefix = "gen" if call.name == "get_generation" else "price"
-            start = date.fromisoformat(call.input["start"])
-            end = date.fromisoformat(call.input["end"])
-            fetches[f"{prefix}_{counter}"] = (prefix, start, end)
+        if call.name in REF_PREFIX:
+            replay.execute(call.name, call.input)
         elif call.name == "compute_stats":
-            pair = (call.input.get("ref", ""), call.input.get("source") or "day_ahead_price")
-            if pair not in wanted:
-                wanted.append(pair)
+            inputs = call.input
+            if inputs.get("operation") == "capture_price" and inputs.get("weight_ref"):
+                pairs = [(inputs.get("ref", ""), None),
+                         (inputs["weight_ref"], inputs.get("weight_source"))]  # fmt: skip
+            else:
+                pairs = [(inputs.get("ref", ""), inputs.get("source"))]
+            wanted += [p for p in pairs if p not in wanted]
 
     charts = []
     for ref, source in wanted[:MAX_CHARTS]:
-        if ref not in fetches:
+        response = replay.store.get(ref)
+        if response is None:
             continue
-        kind, start, end = fetches[ref]
         try:
-            if kind == "price":
-                response = data.day_ahead_price(start, end)
-                series = response.get_series("day_ahead_price")
-                title = "Day-ahead electricity price, Germany–Luxembourg"
-            else:
-                response = data.public_power(start, end)
-                series = source_series(response, source)
-                label = source_label(source)
-                title = label[0].upper() + label[1:]
-                if source not in ("load", "total"):
-                    title += " generation"
-        except (EnergyChartsError, KeyError, ValueError):
+            series = replay.series_for(response, source)
+        except (ToolInputError, EnergyChartsError, KeyError, ValueError):
             continue  # a chart is a nice-to-have; never fail the answer for it
+        if not series.points:
+            continue
         minutes = series.interval_minutes * bucket_size(series) if series.interval_minutes else None
         charts.append(
             Chart(
-                title=title,
+                title=_chart_title(
+                    response.endpoint, source or "", response.attributes.get("region")
+                ),
                 unit=series.unit,
-                period=format_period(start.isoformat(), end.isoformat()),
+                period=format_period(series.start.isoformat(), series.end.isoformat()),
                 resolution_minutes=minutes,
                 points=downsample(series),
             )

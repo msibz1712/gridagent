@@ -79,6 +79,42 @@ class EnergyChartsClient:
         params = {"bzn": bzn, "start": start.isoformat(), "end": end.isoformat()}
         return self._fetch("/v2/price", params, start, end)
 
+    def total_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse:
+        """Total net generation incl. industrial self-supply in MW (Germany only).
+
+        Load is reported as `load_incl_self_consumption` here (not `load`).
+        """
+        params = {"country": country, "start": start.isoformat(), "end": end.isoformat()}
+        return self._fetch("/v2/total_power", params, start, end)
+
+    def cross_border(
+        self, start: date, end: date, kind: str = "physical", country: str = "de"
+    ) -> TimeSeriesResponse:
+        """Cross-border flows in GW per neighbour plus 'sum'; positive = import.
+
+        kind="physical": measured physical flows (/v2/cbpf)
+        kind="trading":  scheduled commercial exchanges (/v2/cbet)
+        """
+        if kind not in ("physical", "trading"):
+            raise ValueError("kind must be 'physical' or 'trading'")
+        endpoint = "/v2/cbpf" if kind == "physical" else "/v2/cbet"
+        params = {"country": country, "start": start.isoformat(), "end": end.isoformat()}
+        return self._fetch(endpoint, params, start, end)
+
+    def installed_power(self, time_step: str = "yearly", country: str = "de") -> TimeSeriesResponse:
+        """Installed capacity per technology (GW; battery capacity in GWh).
+
+        Unlike every other endpoint, timestamps label the reporting year/month and the
+        values are the installed capacity at the END of that period. Yearly data also
+        contains the legal expansion targets (e.g. `solar_planned_eeg_2023`).
+        """
+        if time_step not in ("yearly", "monthly"):
+            raise ValueError("time_step must be 'yearly' or 'monthly'")
+        params = {"country": country, "time_step": time_step}
+        # Not a date range: treat as "touching today" so it is refreshed after 15 minutes.
+        today = self._today()
+        return self._fetch("/v2/installed_power", params, today, today)
+
     # ---------- internals ----------
 
     def _fetch(

@@ -6,7 +6,7 @@ Paths are relative to the current directory and can be overridden with
 environment variables (useful in Docker):
   GARDEN_AGENTS_DIR (default: agents), GARDEN_TEMPLATE_DIR (default:
   templates/agent_template), GARDEN_LOG_DIR (default: logs),
-  GARDEN_CACHE_DIR (default: .cache/energy_charts)
+  GARDEN_CACHE_DIR (default: .cache)
 """
 
 import importlib.util
@@ -34,7 +34,7 @@ from gridagent.evals.report import (
     load_report,
     write_report,
 )
-from gridagent.evals.runner import CaseResult, EvalReport, estimate_live_cost
+from gridagent.evals.runner import CaseResult, EvalReport, estimate_live_cost, supported_cases
 from gridagent.evals.session import choose_offline_mode, evaluate, load_agent_eval_set
 from gridagent.garden.registry import discover, resolve
 from gridagent.garden.scaffold import create_agent
@@ -187,7 +187,7 @@ def run(
 
     cfg = loaded.config
     llm = build_llm(cfg, model)
-    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache/energy_charts"))
+    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"))
     fixed_today = date.fromisoformat(today) if today else None
 
     with console.status(f"Running {cfg.name} {cfg.version} on {llm.model_name}..."):
@@ -302,7 +302,9 @@ def eval_command(
     else:
         mode = "oracle" if oracle else choose_offline_mode(loaded, model_name)
 
-    console.print(f"Evaluating {loaded.spec} ({mode}, {len(eval_set.cases)} cases)")
+    cases, skipped = supported_cases(loaded, eval_set)
+    skipped_text = f", {len(skipped)} skipped (need a newer version)" if skipped else ""
+    console.print(f"Evaluating {loaded.spec} ({mode}, {len(cases)} cases{skipped_text})")
     try:
         report, rec_path = evaluate(
             loaded, model_name, mode, FIXTURE_DIR, record=record, progress=_print_progress

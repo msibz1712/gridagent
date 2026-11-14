@@ -7,10 +7,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from gridagent.agent.config import LoadedAgent
+from gridagent.agent.config import LoadedAgent, parse_semver
 from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import RunLog
-from gridagent.data.fixture_source import DataProvider
+from gridagent.data.provider import DataProvider
 from gridagent.evals.dataset import EvalCase, EvalSet
 from gridagent.evals.scoring import CheckResults, score
 from gridagent.llm.base import LLM, TokenUsage
@@ -116,9 +116,10 @@ def run_eval(
     after_case: Callable[[EvalCase, RunLog, LLM], RunLog] | None = None,
     progress: Callable[[int, int, CaseResult], None] | None = None,
 ) -> EvalReport:
-    """Run every case. `after_case` lets the caller record or adjust each run log."""
+    """Run every supported case. `after_case` lets the caller record or adjust each run log."""
+    cases, skipped = supported_cases(agent, eval_set)
     results = []
-    for i, case in enumerate(eval_set.cases, start=1):
+    for i, case in enumerate(cases, start=1):
         llm = llm_for_case(case)
         log = run_case(agent, case, llm, data, eval_set)
         if after_case is not None:
@@ -126,7 +127,7 @@ def run_eval(
         result = case_result(case, log)
         results.append(result)
         if progress is not None:
-            progress(i, len(eval_set.cases), result)
+            progress(i, len(cases), result)
 
     return EvalReport(
         created_at=datetime.now(UTC),
@@ -138,10 +139,29 @@ def run_eval(
         eval_set_version=eval_set.version,
         eval_set_hash=eval_set_hash,
         today=eval_set.today.isoformat(),
-        notes=mode_notes(mode),
+        notes=mode_notes(mode) + skipped_note(skipped),
         metrics=compute_metrics(results),
         cases=results,
     )
+
+
+def supported_cases(agent: LoadedAgent, eval_set: EvalSet) -> tuple[list[EvalCase], list[str]]:
+    """Cases this agent version can answer, and the ids of the ones it skips."""
+    version = parse_semver(agent.config.version)
+    supported, skipped = [], []
+    for case in eval_set.cases:
+        if case.min_version and parse_semver(case.min_version) > version:
+            skipped.append(case.id)
+        else:
+            supported.append(case)
+    return supported, skipped
+
+
+def skipped_note(skipped: list[str]) -> list[str]:
+    if not skipped:
+        return []
+    return [f"{len(skipped)} case(s) skipped because they need a newer agent version: "
+            f"{', '.join(skipped)}."]  # fmt: skip
 
 
 def mode_notes(mode: Mode) -> list[str]:

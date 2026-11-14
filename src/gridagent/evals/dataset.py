@@ -11,7 +11,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from gridagent.agent.config import AgentConfigError, format_validation_error
+from gridagent.agent.config import SEMVER_PATTERN, AgentConfigError, format_validation_error
 from gridagent.tools.definitions import ALL_TOOLS
 
 Outcome = Literal["answer", "refuse", "no_data", "refuse_or_no_data"]
@@ -54,6 +54,8 @@ class EvalCase(_Strict):
     mentions: list[list[str]] = []  # each inner list: at least one must appear
     tool_calls: list[ExpectedToolCall] = []
     oracle_answer: str
+    # First agent version that has the tools for this case; older versions skip it.
+    min_version: str | None = Field(None, pattern=SEMVER_PATTERN)
 
     @model_validator(mode="after")
     def consistent_expectations(self) -> "EvalCase":

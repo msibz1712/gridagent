@@ -168,3 +168,43 @@ def test_oracle_catches_a_tool_bug(monkeypatch: pytest.MonkeyPatch) -> None:
     failed = {c.id for c in report.cases if "grounded" in c.failed_checks}
     assert {"wind_share_last_week", "solar_share_october", "renewable_share_last_week"} <= failed
     assert "price_mean_yesterday" not in failed  # price questions are unaffected
+
+
+def test_new_cases_are_skipped_for_older_versions() -> None:
+    report, _ = evaluate(agent, "oracle", "oracle", FIXTURE_DIR)  # agent is 0.1.0
+    assert report.metrics.n_cases == 29
+    assert any("13 case(s) skipped" in note for note in report.notes)
+
+
+def test_latest_version_oracle_passes_all_cases() -> None:
+    latest = resolve(AGENTS, "energy_qa")
+    report, _ = evaluate(latest, "oracle", "oracle", FIXTURE_DIR)
+    failures = {c.id: c.failed_checks for c in report.cases if not c.passed}
+    assert failures == {} and report.metrics.n_cases == 42
+
+
+def test_oracle_catches_a_broken_capture_price(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mutation test for Stage 1: an unweighted mean instead of a weighted one must be caught."""
+    from gridagent.tools import stats
+
+    def unweighted(price, generation):
+        result = stats.compute_stats(price, stats.Operation.MEAN)
+        return result.model_copy(update={"operation": stats.Operation.CAPTURE_PRICE})
+
+    monkeypatch.setattr(stats, "_capture_price", unweighted)
+    latest = resolve(AGENTS, "energy_qa")
+    report, _ = evaluate(latest, "oracle", "oracle", FIXTURE_DIR)
+    failed = {c.id for c in report.cases if "grounded" in c.failed_checks}
+    assert "solar_market_value_october" in failed
+
+
+def test_scoring_list_args_need_only_include_expected_items() -> None:
+    from gridagent.evals.dataset import ExpectedToolCall
+    from gridagent.evals.scoring import call_matches
+
+    expected = ExpectedToolCall(name="get_regional_generation", args={"sources": ["solar"]})
+    actual = {"name": "get_regional_generation", "input": {"sources": ["load", "solar"]}}
+    assert call_matches(expected, actual)
+    assert not call_matches(
+        expected, {"name": "get_regional_generation", "input": {"sources": ["load"]}}
+    )

@@ -39,10 +39,10 @@ def call(name: str, is_error: bool = False, **tool_input) -> ToolCallLog:
 
 
 def test_build_data_picks_source(tmp_path: Path) -> None:
-    from gridagent.data.client import EnergyChartsClient
+    from gridagent.data.provider import LiveDataSource
 
     assert isinstance(services.build_data(True, FIXTURE_DIR, tmp_path), FixtureDataSource)
-    assert isinstance(services.build_data(False, FIXTURE_DIR, tmp_path), EnergyChartsClient)
+    assert isinstance(services.build_data(False, FIXTURE_DIR, tmp_path), LiveDataSource)
 
 
 def test_build_llm_uses_agent_config() -> None:
@@ -53,9 +53,9 @@ def test_build_llm_uses_agent_config() -> None:
 
 
 def test_latest_energy_qa_uses_haiku_for_cost() -> None:
-    """0.2.0 switched the default model to Haiku 5.5 (no server-side refusal fallback)."""
+    """Since 0.2.0 the default model is Haiku 5.5 (no server-side refusal fallback)."""
     latest = resolve(AGENTS, "energy_qa")
-    assert latest.spec == "energy_qa@0.2.0"
+    assert latest.spec == "energy_qa@0.3.0"
     llm = services.build_llm(latest.config)
     assert llm.model_name == "claude-haiku-5-5"
     assert llm.use_fallback is False
@@ -193,3 +193,72 @@ def test_downsample_keeps_charts_small() -> None:
     points = services.downsample(source_series(october, "solar"))
     assert len(points) <= services.MAX_CHART_POINTS
     assert max(p.v for p in points) > 0
+
+
+# ---------- Stage 1: new data in plain language ----------
+
+latest = resolve(AGENTS, "energy_qa")
+latest_cases = {c.id: c for c in load_agent_eval_set(latest)[0].cases}
+
+
+def latest_run(case_id: str):
+    runner = Agent(latest, oracle_llm(latest_cases[case_id]), FixtureDataSource(FIXTURE_DIR),
+                   today=lambda: eval_set.today)  # fmt: skip
+    return runner.run(latest_cases[case_id].question)
+
+
+def test_no_jargon_in_steps_for_any_latest_case() -> None:
+    jargon = ("compute_stats", "get_", "ref", "tool", "model", "capture_price", "weight_",
+              "count_below", "_")  # fmt: skip
+    for case_id in latest_cases:
+        for step in services.method_steps(latest_run(case_id)):
+            assert not any(j in step for j in jargon), (case_id, step)
+
+
+def test_stage1_steps_read_well() -> None:
+    assert services.method_steps(latest_run("poland_exchange_last_week")) == [
+        "Retrieved physical cross-border electricity flows between Germany and its neighbours "
+        "in 15-minute resolution for 2 Nov 2026 – 8 Nov 2026",
+        "Calculated the net energy exchanged with Poland",
+    ]
+    steps = services.method_steps(latest_run("solar_market_value_october"))
+    assert steps[2] == "Calculated the price weighted by solar generation (market value)"
+    assert steps[3] == (
+        "Looked up the official figure: Official monthly market values (Monatsmarktwerte) "
+        "under the EEG (2026-10)"
+    )
+    [step, cf] = services.method_steps(latest_run("capacity_factor_wind_onshore_october"))
+    assert cf.startswith("Calculated the capacity factor of onshore wind")
+    [_, count] = services.method_steps(latest_run("negative_price_hours_october"))
+    assert count == "Counted the hours below 0 for the price"
+
+
+def test_stage1_sources() -> None:
+    names = [s["name"] for s in services.sources_for_run(latest_run("regional_solar_tennet"))]
+    assert names == [services.SMARD_SOURCE["name"]]
+    co2 = services.sources_for_run(latest_run("co2_factor_2025"))
+    assert co2[0]["name"].startswith("Umweltbundesamt") and co2[0]["url"].startswith("https://")
+    market = [s["name"] for s in services.sources_for_run(latest_run("solar_market_value_october"))]
+    assert any("netztransparenz" in n for n in market) and services.PRICE_SOURCE["name"] in market
+
+
+def test_stage1_charts() -> None:
+    data = FixtureDataSource(FIXTURE_DIR)
+    [flow] = services.charts_for_run(latest_run("poland_exchange_last_week"), data)
+    assert flow.title == "Net physical imports: Poland (negative = export)" and flow.unit == "GW"
+    [region] = services.charts_for_run(latest_run("regional_solar_tennet"), data)
+    assert region.title == "Solar generation, TenneT control area" and region.unit == "MW"
+    price, solar = services.charts_for_run(latest_run("solar_market_value_october"), data)
+    assert price.title.startswith("Day-ahead") and solar.title == "Solar generation"
+    assert services.charts_for_run(latest_run("co2_factor_2025"), data) == []  # no series
+
+
+def test_regional_steps_name_their_control_area() -> None:
+    steps = services.method_steps(latest_run("regional_wind_largest_area"))
+    energy_steps = [s for s in steps if s.startswith("Calculated")]
+    assert energy_steps == [
+        f"Calculated the total energy from onshore wind in the {area} control area"
+        for area in ("50Hertz", "Amprion", "TenneT", "TransnetBW")
+    ]
+    data = FixtureDataSource(FIXTURE_DIR)
+    assert len(services.charts_for_run(latest_run("regional_wind_largest_area"), data)) == 4
