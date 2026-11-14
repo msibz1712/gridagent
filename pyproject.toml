@@ -40,10 +40,15 @@ target-version = "py312"
 # I = import sorting, B = bugbear (likely bugs), UP = modern Python syntax
 select = ["E", "W", "F", "I", "B", "UP"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["gridagent"]
+known-local-folder = ["conftest"]  # tests import shared helpers from tests/conftest.py
+
 # ---------- pytest ----------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+# Live tests (real network) are skipped unless you run: uv run pytest -m live
+addopts = "-ra -m 'not live'"
 markers = [
     "live: test calls real external APIs (skipped by default, never run in CI)",
 ]
