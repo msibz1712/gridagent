@@ -36,27 +36,30 @@ uv run garden validate             # check every agent.yaml (exit code 1 if inva
 uv run garden tools                # tools agents can use
 uv run garden new my_agent         # scaffold agents/my_agent/0.1.0 from the template
 uv run garden run energy_qa@0.1.0 "..."   # pin a version
+uv run garden runs                 # monitoring: recent runs, ok/error rate, latency, cost
 ```
 
 Layout: `agents/<name>/README.md` plus one folder per semantic version,
 `agents/<name>/<version>/{agent.yaml, system_prompt.md}`.
 
-## Web app
+## Website
 
 ```bash
 uv sync --extra web                        # optional extra: FastAPI + uvicorn
-set -a && source .env && set +a            # only needed for live questions
+set -a && source .env && set +a            # the website needs the API key
 uv run --extra web garden ui               # then open http://localhost:8000
 ```
 
-A FastAPI backend (`src/gridagent/web/api.py`, API docs at `/api/docs`) serves a
-single-page front end in plain HTML/CSS/JS (no build step, no external requests).
-Pages: **Ask** (live model, or a free oracle demo with no API cost; answer, metrics,
-a chart of the data behind the answer and a step-by-step trace), **Runs** (monitoring
-over `logs/runs.jsonl`), **Evaluations** (reports, comparison, free offline eval) and
-**Agents** (registry, READMEs, configs). Light and dark themes; works on mobile.
-The server listens on 127.0.0.1 only and enforces a spending limit for live calls
-(`GARDEN_UI_BUDGET_USD`, default $1.00).
+A clean question-and-answer site for researchers and analysts: ask a question and
+get the answer with the period, a chart of the underlying data (CSV download), a
+plain-language "How this was calculated" section and linked sources, plus an About
+page on coverage, method and limits. It deliberately shows no model, agent or
+evaluation details; those stay in the CLI (`garden eval`, `garden runs`, ...).
+
+Backend: FastAPI (`src/gridagent/web/api.py`; `/api/health`, `/api/config`,
+`/api/ask`). Front end: plain HTML/CSS/JS, no build step, no external requests.
+Live Energy-Charts data by default (`GARDEN_WEB_FIXTURES=1` for recorded data);
+listens on 127.0.0.1 only; spending limit `GARDEN_UI_BUDGET_USD` (default $1.00).
 
 ## Evaluations
 

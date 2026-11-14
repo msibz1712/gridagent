@@ -2,30 +2,28 @@
 
 Keeping this logic here (not in the web layer) means it is written once and
 tested on its own; the web API only translates HTTP to these functions.
+
+The "presentation" helpers at the bottom turn an agent run into what an end
+user needs (answer, period, sources, plain-language method, charts) without
+any agent or model vocabulary.
 """
 
-import json
 import math
 import threading
 from datetime import date
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel
 
 from gridagent.agent.config import AgentConfig, LoadedAgent
 from gridagent.agent.loop import Agent
-from gridagent.agent.runlog import RunLog, append_run_log
+from gridagent.agent.runlog import RunLog, ToolCallLog, append_run_log
 from gridagent.data.cache import ResponseCache
 from gridagent.data.client import EnergyChartsClient, EnergyChartsError
 from gridagent.data.fixture_source import DataProvider, FixtureDataSource
 from gridagent.data.models import Series
 from gridagent.data.sources import source_series
-from gridagent.evals.dataset import EvalCase
-from gridagent.evals.offline import oracle_llm
-from gridagent.evals.report import load_report
-from gridagent.evals.runner import EvalReport, percentile
-from gridagent.garden.registry import discover
+from gridagent.evals.runner import percentile
 from gridagent.llm.claude import ClaudeLLM
 
 
@@ -63,42 +61,7 @@ def ask(
     return log
 
 
-def oracle_demo(agent: LoadedAgent, case: EvalCase, fixture_dir: Path, today: date) -> RunLog:
-    """Free demo: the scripted oracle answers an eval question with real tools on fixtures."""
-    runner = Agent(agent, oracle_llm(case), FixtureDataSource(fixture_dir), today=lambda: today)
-    return runner.run(case.question)
-
-
-def valid_specs(agents_dir: Path) -> list[str]:
-    """All valid 'name@version' specs, newest version of each agent first."""
-    specs = []
-    for entry in discover(agents_dir):
-        specs += [f"{entry.name}@{v.version}" for v in reversed(entry.versions) if v.agent]
-    return specs
-
-
-def trace_rows(log: RunLog) -> list[dict[str, Any]]:
-    """One row per model step and per tool call, for a trace table."""
-    rows = []
-    for step in log.steps:
-        u = step.usage
-        tokens_in = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
-        rows.append({
-            "step": step.step, "kind": "model", "name": step.model,
-            "detail": f"stop_reason={step.stop_reason}", "seconds": step.latency_s,
-            "tokens in/out": f"{tokens_in}/{u.output_tokens}",
-            "cost_usd": step.cost_usd, "error": False,
-        })  # fmt: skip
-        for call in step.tool_calls:
-            rows.append({
-                "step": step.step, "kind": "tool", "name": call.name,
-                "detail": json.dumps(call.input), "seconds": call.latency_s,
-                "tokens in/out": "", "cost_usd": None, "error": call.is_error,
-            })  # fmt: skip
-    return rows
-
-
-# ---------- run history (monitoring) ----------
+# ---------- run history (monitoring, used by `garden runs`) ----------
 
 
 def load_runs(log_path: Path, limit: int = 200) -> list[RunLog]:
@@ -126,51 +89,15 @@ class RunSummary(BaseModel):
 def summarize_runs(runs: list[RunLog]) -> RunSummary:
     n = len(runs)
     latencies = sorted(r.latency_s for r in runs)
+    failed = sum(r.status in ("error", "timeout", "max_steps") for r in runs)
     return RunSummary(
         n_runs=n,
         ok_rate=sum(r.status == "ok" for r in runs) / n if n else None,
-        error_rate=sum(r.status in ("error", "timeout", "max_steps") for r in runs) / n
-        if n
-        else None,
+        error_rate=failed / n if n else None,
         latency_p50_s=percentile(latencies, 50),
         latency_p95_s=percentile(latencies, 95),
         total_cost_usd=round(sum(r.cost_usd or 0 for r in runs), 6),
     )
-
-
-def run_row(run: RunLog) -> dict[str, Any]:
-    return {
-        "time (UTC)": run.started_at.strftime("%Y-%m-%d %H:%M:%S"),
-        "agent": f"{run.agent}@{run.agent_version}",
-        "model": run.model,
-        "status": run.status,
-        "question": run.question,
-        "steps": len(run.steps),
-        "seconds": run.latency_s,
-        "cost_usd": run.cost_usd,
-        "run_id": run.run_id,
-    }
-
-
-# ---------- eval reports ----------
-
-
-def list_reports(reports_dir: Path) -> list[Path]:
-    """Eval report JSON files, newest first."""
-    if not reports_dir.is_dir():
-        return []
-    return sorted(reports_dir.glob("*.json"), reverse=True)
-
-
-def load_reports(paths: list[Path]) -> dict[str, EvalReport]:
-    """Readable reports keyed by file name (broken files are skipped)."""
-    reports = {}
-    for path in paths:
-        try:
-            reports[path.name] = load_report(path)
-        except ValueError:
-            continue
-    return reports
 
 
 # ---------- spending guard ----------
@@ -200,6 +127,98 @@ class Budget:
             self.spent_usd += cost_usd or 0.0
 
 
+# ---------- presentation: plain language for end users ----------
+
+SOURCE_LABELS = {
+    "solar": "solar",
+    "wind": "wind (onshore + offshore)",
+    "wind_onshore": "onshore wind",
+    "wind_offshore": "offshore wind",
+    "biomass": "biomass",
+    "hydro": "hydropower",
+    "pumped_storage": "pumped storage",
+    "geothermal": "geothermal",
+    "lignite": "lignite",
+    "hard_coal": "hard coal",
+    "gas": "natural gas",
+    "oil": "oil",
+    "fossil": "fossil fuels",
+    "renewable": "renewables",
+    "waste": "waste",
+    "others": "other sources",
+    "load": "electricity demand (load)",
+    "total": "total public net generation",
+}
+GENERATION_SOURCE = {
+    "name": "Energy-Charts.info (Fraunhofer ISE)",
+    "url": "https://energy-charts.info",
+    "license": "CC BY 4.0",
+}
+PRICE_SOURCE = {
+    "name": "Bundesnetzagentur | SMARD.de, via Energy-Charts.info",
+    "url": "https://www.smard.de",
+    "license": "CC BY 4.0",
+}
+
+
+def source_label(source: str | None) -> str:
+    return SOURCE_LABELS.get(source or "", (source or "").replace("_", " "))
+
+
+def format_period(start: str, end: str) -> str:
+    """'2026-11-02', '2026-11-08' -> '2 Nov 2026 – 8 Nov 2026' (or one date)."""
+    a, b = date.fromisoformat(start), date.fromisoformat(end)
+    first = f"{a.day} {a:%b %Y}"
+    return first if a == b else f"{first} – {b.day} {b:%b %Y}"
+
+
+def method_step(call: ToolCallLog) -> str:
+    """Describe one tool call the way a methods section would."""
+    args = call.input
+    if call.name in ("get_generation", "get_day_ahead_price"):
+        what = (
+            "electricity generation and demand data for Germany"
+            if call.name == "get_generation"
+            else "day-ahead electricity prices (Germany–Luxembourg)"
+        )
+        period = format_period(args.get("start", ""), args.get("end", ""))
+        if call.is_error:
+            return f"Looked for {what} for {period}: no data available"
+        return f"Retrieved {what} in 15-minute resolution for {period}"
+
+    subject = source_label(args.get("source")) if args.get("source") else "the price"
+    per_day = " for each day" if args.get("per_day") else ""
+    operation = args.get("operation")
+    if operation == "share":
+        whole = source_label(args.get("relative_to") or "total")
+        text = f"Calculated the share of {subject} in {whole}"
+    elif operation == "energy":
+        text = f"Calculated the total energy from {subject}{per_day}"
+    elif operation == "mean":
+        text = f"Calculated the average of {subject}{per_day}"
+    elif operation in ("max", "min"):
+        word = "highest" if operation == "max" else "lowest"
+        text = f"Found the {word} value of {subject}{per_day} and when it occurred"
+    else:
+        text = f"Calculated the {operation} of {subject}{per_day}"
+    return text + (" (failed)" if call.is_error else "")
+
+
+def method_steps(log: RunLog) -> list[str]:
+    return [method_step(call) for call in log.tool_calls]
+
+
+def sources_for_run(log: RunLog) -> list[dict[str, str]]:
+    """The data sources an answer is based on (only for successful data fetches)."""
+    names = {c.name for c in log.tool_calls if not c.is_error}
+    sources = []
+    if "get_generation" in names:
+        sources.append(GENERATION_SOURCE)
+    if "get_day_ahead_price" in names:
+        sources.append(PRICE_SOURCE)
+    return sources
+
+
 # ---------- charts of the data behind an answer ----------
 
 MAX_CHART_POINTS = 400
@@ -207,7 +226,7 @@ MAX_CHARTS = 3
 
 
 class ChartPoint(BaseModel):
-    t: str  # ISO timestamp (start of the bucket, local time)
+    t: str  # ISO timestamp (start of the interval, German local time)
     v: float | None
 
 
@@ -215,12 +234,13 @@ class Chart(BaseModel):
     title: str
     unit: str
     period: str
+    resolution_minutes: int | None  # after averaging; for labels and CSV
     points: list[ChartPoint]
 
 
 def downsample(series: Series, max_points: int = MAX_CHART_POINTS) -> list[ChartPoint]:
     """Average consecutive values so a month of 15-minute data fits in a chart."""
-    size = max(1, math.ceil(len(series.points) / max_points))
+    size = bucket_size(series, max_points)
     points = []
     for i in range(0, len(series.points), size):
         bucket = series.points[i : i + size]
@@ -228,6 +248,10 @@ def downsample(series: Series, max_points: int = MAX_CHART_POINTS) -> list[Chart
         mean = sum(values) / len(values) if values else None
         points.append(ChartPoint(t=bucket[0].timestamp.isoformat(), v=mean))
     return points
+
+
+def bucket_size(series: Series, max_points: int = MAX_CHART_POINTS) -> int:
+    return max(1, math.ceil(len(series.points) / max_points))
 
 
 def charts_for_run(log: RunLog, data: DataProvider) -> list[Chart]:
@@ -262,15 +286,24 @@ def charts_for_run(log: RunLog, data: DataProvider) -> list[Chart]:
             if kind == "price":
                 response = data.day_ahead_price(start, end)
                 series = response.get_series("day_ahead_price")
-                title = "Day-ahead price (DE-LU)"
+                title = "Day-ahead electricity price, Germany–Luxembourg"
             else:
                 response = data.public_power(start, end)
                 series = source_series(response, source)
-                title = f"Generation: {source.replace('_', ' ')}"
+                label = source_label(source)
+                title = label[0].upper() + label[1:]
+                if source not in ("load", "total"):
+                    title += " generation"
         except (EnergyChartsError, KeyError, ValueError):
             continue  # a chart is a nice-to-have; never fail the answer for it
+        minutes = series.interval_minutes * bucket_size(series) if series.interval_minutes else None
         charts.append(
-            Chart(title=title, unit=series.unit, period=f"{start} to {end}",
-                  points=downsample(series))
-        )  # fmt: skip
+            Chart(
+                title=title,
+                unit=series.unit,
+                period=format_period(start.isoformat(), end.isoformat()),
+                resolution_minutes=minutes,
+                points=downsample(series),
+            )
+        )
     return charts

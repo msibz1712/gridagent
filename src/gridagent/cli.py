@@ -1,6 +1,6 @@
 """Command-line interface for the Agent Garden (`garden`).
 
-Commands: `list`, `tools`, `validate`, `new`, `run`, `eval`, `compare`, `ui`, `version`.
+Commands: `list`, `tools`, `validate`, `new`, `run`, `runs`, `eval`, `compare`, `ui`, `version`.
 
 Paths are relative to the current directory and can be overridden with
 environment variables (useful in Docker):
@@ -38,7 +38,7 @@ from gridagent.evals.runner import CaseResult, EvalReport, estimate_live_cost
 from gridagent.evals.session import choose_offline_mode, evaluate, load_agent_eval_set
 from gridagent.garden.registry import discover, resolve
 from gridagent.garden.scaffold import create_agent
-from gridagent.services import build_data, build_llm
+from gridagent.services import build_data, build_llm, load_runs, summarize_runs
 from gridagent.tools.definitions import ALL_TOOLS
 
 app = typer.Typer(
@@ -369,6 +369,38 @@ def compare_command(
     out = out_dir / f"compare_{stamp}.md"
     out.write_text(comparison_markdown(result))
     console.print(f"Comparison: {out}")
+
+
+@app.command()
+def runs(
+    limit: Annotated[int, typer.Option(help="How many recent runs to show")] = 20,
+) -> None:
+    """Monitoring: recent runs from logs/runs.jsonl with status, latency and cost."""
+    log_path = _path("GARDEN_LOG_DIR", "logs") / "runs.jsonl"
+    recent = load_runs(log_path, limit=max(limit, 1))
+    if not recent:
+        console.print(f"No runs logged yet in {log_path}.")
+        return
+    s = summarize_runs(recent)
+    console.print(
+        f"{s.n_runs} runs · ok {fmt(s.ok_rate, 'pct')} · errors {fmt(s.error_rate, 'pct')} · "
+        f"latency p50/p95 {fmt(s.latency_p50_s, 'num')}/{fmt(s.latency_p95_s, 'num')} s · "
+        f"cost {fmt(s.total_cost_usd, 'usd')}"
+    )
+    table = Table()
+    for column in ("time (UTC)", "status", "agent", "model", "question", "s", "cost"):
+        table.add_column(column)
+    for run in recent:
+        table.add_row(
+            f"{run.started_at:%Y-%m-%d %H:%M}",
+            run.status,
+            f"{run.agent}@{run.agent_version}",
+            run.model,
+            run.question[:60],
+            f"{run.latency_s:.1f}",
+            fmt(run.cost_usd, "usd"),
+        )
+    console.print(table)
 
 
 @app.command()

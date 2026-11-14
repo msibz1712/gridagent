@@ -3,152 +3,120 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GridAgent</title>
-  <meta name="description" content="An evaluated AI agent for Germany's electricity system">
+  <title>GridAgent · Germany's electricity system, answered with evidence</title>
+  <meta name="description" content="Ask questions about Germany's electricity generation and day-ahead prices. Answers are computed from Energy-Charts data and cite their sources.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23f59e0b' d='M13 2 4 14h7l-1 8 9-12h-7z'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="#/ask" aria-label="GridAgent home">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#/" aria-label="GridAgent home">
         <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
         <span class="brand-name">GridAgent</span>
-        <span class="brand-tag">Germany's power system, answered with evidence</span>
       </a>
       <nav class="nav" aria-label="Main">
-        <a href="#/ask" data-route="ask">Ask</a>
-        <a href="#/runs" data-route="runs">Runs</a>
-        <a href="#/evals" data-route="evals">Evaluations</a>
-        <a href="#/agents" data-route="agents">Agents</a>
+        <a href="#/" data-route="ask">Ask</a>
+        <a href="#/about" data-route="about">About</a>
       </nav>
-      <div class="topbar-actions">
-        <span class="spend-pill" id="spend-pill" title="Spent on live model calls in this server session">$0.0000 / $1.00</span>
-        <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
-        </button>
-      </div>
+      <button class="icon-btn" id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+      </button>
     </div>
   </header>
 
-  <div class="controlbar">
-    <div class="controlbar-inner">
-      <label class="control">
-        <span>Agent</span>
-        <select id="agent-select"></select>
-      </label>
-      <label class="control">
-        <span>Model</span>
-        <select id="model-select"></select>
-      </label>
-      <label class="control switch-control" title="Recorded data is reproducible and free of API rate limits">
-        <span>Data</span>
-        <span class="switch">
-          <input type="checkbox" id="fixtures-toggle" checked>
-          <span class="switch-track"><span class="switch-thumb"></span></span>
-          <span class="switch-label" id="fixtures-label">Recorded (fixtures)</span>
-        </span>
-      </label>
-      <span class="control-hint" id="today-hint"></span>
-    </div>
-  </div>
-
-  <main class="container">
+  <main>
     <!-- ASK -->
     <section class="view" id="view-ask" hidden>
       <div class="hero">
-        <h1>Ask about Germany's electricity system</h1>
-        <p class="muted">Generation by source, load and day-ahead prices from Energy-Charts. Every number is computed by a tool, never guessed, and every answer cites its source and period.</p>
-      </div>
+        <div class="wrap narrow">
+          <p class="eyebrow">Germany's electricity system</p>
+          <h1>Ask a question. Get an answer you can cite.</h1>
+          <p class="lead">Generation by source, electricity demand and day-ahead prices, calculated from
+            public Energy-Charts data, with the period and sources stated for every answer.</p>
 
-      <div class="segmented" role="tablist" aria-label="Answer mode">
-        <button role="tab" class="seg active" data-mode="live" aria-selected="true">Live model</button>
-        <button role="tab" class="seg" data-mode="demo" aria-selected="false">Free demo <span class="badge-soft">no API cost</span></button>
-      </div>
-
-      <div class="card ask-card" id="live-panel">
-        <div class="ask-box">
-          <textarea id="question" rows="2" maxlength="500" placeholder="e.g. What share of Germany's electricity came from wind last week?"></textarea>
-          <button class="btn btn-primary" id="ask-btn">
-            <span>Ask</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-          </button>
+          <form class="search" id="ask-form" autocomplete="off">
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="question" name="question" type="text" maxlength="500"
+                   placeholder="e.g. What share of Germany's electricity came from wind last week?"
+                   aria-label="Your question">
+            <button class="btn btn-primary" id="ask-btn" type="submit">Ask</button>
+          </form>
+          <div class="notice" id="unavailable" hidden>The assistant is not available right now. Please try again later.</div>
+          <div class="examples">
+            <span class="examples-label">Try:</span>
+            <div class="chips" id="examples"></div>
+          </div>
         </div>
-        <div class="ask-meta">
-          <span id="key-status"></span>
-          <span class="muted" id="cost-hint"></span>
-          <span class="muted kbd-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
-        </div>
-        <div class="chips" id="example-chips"></div>
       </div>
 
-      <div class="card ask-card" id="demo-panel" hidden>
-        <p class="muted small">The <strong>oracle</strong> is a scripted, perfect agent from the eval set: it makes the expected tool calls and the tools really run on the recorded data. It shows how the agent works without an API key. It is not the language model.</p>
-        <div class="demo-list" id="demo-list"></div>
-      </div>
-
-      <div id="result"></div>
-    </section>
-
-    <!-- RUNS -->
-    <section class="view" id="view-runs" hidden>
-      <div class="page-head">
-        <div>
-          <h1>Run history</h1>
-          <p class="muted">Every question asked through the CLI or this app, from <code>logs/runs.jsonl</code>.</p>
+      <div class="wrap narrow">
+        <div id="result" aria-live="polite"></div>
+        <div id="history-block" hidden>
+          <h2 class="section-title">Your recent questions</h2>
+          <ul class="history" id="history"></ul>
         </div>
-        <button class="btn" id="runs-refresh">Refresh</button>
-      </div>
-      <div class="kpis" id="runs-kpis"></div>
-      <div class="card table-card"><div class="table-wrap" id="runs-table"></div></div>
-      <div id="run-detail"></div>
-    </section>
-
-    <!-- EVALS -->
-    <section class="view" id="view-evals" hidden>
-      <div class="page-head">
-        <div>
-          <h1>Evaluations</h1>
-          <p class="muted">29 questions with expected answers computed independently from the data. Live evaluations cost money and are run from the CLI: <code>garden eval energy_qa --live --record</code>.</p>
-        </div>
-        <button class="btn btn-primary" id="eval-run">Run offline eval</button>
-      </div>
-      <div class="evals-layout">
-        <aside class="card report-list" id="report-list"></aside>
-        <div id="report-detail"></div>
-      </div>
-      <div class="card compare-card">
-        <h2>Compare two reports</h2>
-        <div class="compare-controls">
-          <label class="control"><span>A</span><select id="compare-a"></select></label>
-          <label class="control"><span>B</span><select id="compare-b"></select></label>
-          <button class="btn" id="compare-btn">Compare</button>
-        </div>
-        <div id="compare-result"></div>
       </div>
     </section>
 
-    <!-- AGENTS -->
-    <section class="view" id="view-agents" hidden>
-      <div class="page-head">
-        <div>
-          <h1>Agent Garden</h1>
-          <p class="muted">Registered agents, their versions, owners, models and documentation.</p>
+    <!-- ABOUT -->
+    <section class="view" id="view-about" hidden>
+      <div class="wrap narrow prose">
+        <p class="eyebrow">About</p>
+        <h1>How GridAgent works</h1>
+        <p class="lead">GridAgent answers factual questions about Germany's electricity system. It retrieves
+          public data, calculates the result and tells you exactly which period and sources the answer is based on.</p>
+
+        <div class="about-grid">
+          <div class="card">
+            <h3>What you can ask</h3>
+            <ul>
+              <li>Generation by source: solar, wind (onshore, offshore), biomass, hydropower, lignite, hard coal, gas and more</li>
+              <li>Shares, e.g. renewables in total generation or in demand</li>
+              <li>Electricity demand (load)</li>
+              <li>Day-ahead prices for the Germany–Luxembourg bidding zone, including highs, lows and daily averages</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Data sources</h3>
+            <ul>
+              <li><a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts.info</a> by Fraunhofer ISE: public net electricity generation, 15-minute resolution (CC BY 4.0)</li>
+              <li><a href="https://www.smard.de" target="_blank" rel="noopener">SMARD.de</a> by Bundesnetzagentur: day-ahead prices, via Energy-Charts (CC BY 4.0)</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Method</h3>
+            <ul>
+              <li>Every number is calculated from the retrieved data, never estimated</li>
+              <li>Energy is the sum of 15-minute power values × 0.25 h</li>
+              <li>Shares follow Energy-Charts' definition: public net generation, excluding pumped-storage output; 50% of waste counts as renewable</li>
+              <li>Dates refer to German local time; “last week” means Monday to Sunday</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Limits</h3>
+            <ul>
+              <li>Germany only, historical data only: no forecasts</li>
+              <li>No investment, trading or tariff advice</li>
+              <li>Recent data is preliminary and can be revised by the data provider</li>
+              <li>At most about three months per question</li>
+            </ul>
+          </div>
         </div>
+        <p class="muted small">GridAgent uses an AI assistant to interpret your question and present the result; the
+          calculations themselves are done by deterministic code. Please check important figures against the original
+          sources linked with each answer. Questions are logged to monitor quality.</p>
       </div>
-      <div class="agent-grid" id="agent-grid"></div>
-      <div id="agent-detail"></div>
     </section>
   </main>
 
   <footer class="footer">
-    <div class="container footer-inner">
-      <span>Data: <a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts.info</a> (Fraunhofer ISE), CC BY 4.0 · Prices: Bundesnetzagentur | SMARD.de</span>
-      <span class="muted" id="footer-version"></span>
+    <div class="wrap footer-inner">
+      <span>Data: <a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts.info</a> (Fraunhofer ISE) · Prices: Bundesnetzagentur | SMARD.de · CC BY 4.0</span>
+      <span class="muted" id="footer-note"></span>
     </div>
   </footer>
 
-  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <script src="/static/app.js"></script>
 </body>
 </html>
