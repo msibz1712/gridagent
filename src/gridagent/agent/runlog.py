@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from gridagent.llm.base import TokenUsage
 
 RunStatus = Literal["ok", "refused", "max_steps", "timeout", "error"]
-RESULT_PREVIEW_CHARS = 2000
+RESULT_PREVIEW_CHARS = 20_000  # enough for a 31-day per_day result
 
 
 class ToolCallLog(BaseModel):
@@ -22,7 +22,7 @@ class ToolCallLog(BaseModel):
     input: dict[str, Any]
     is_error: bool
     latency_s: float
-    result: str  # truncated to RESULT_PREVIEW_CHARS
+    result: str  # what the model saw, truncated to RESULT_PREVIEW_CHARS
 
 
 class StepLog(BaseModel):

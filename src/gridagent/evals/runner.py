@@ -1,0 +1,216 @@
+"""Run an eval set against an agent and aggregate the metrics."""
+
+import math
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel
+
+from gridagent.agent.config import LoadedAgent
+from gridagent.agent.loop import Agent
+from gridagent.agent.runlog import RunLog
+from gridagent.data.fixture_source import DataProvider
+from gridagent.evals.dataset import EvalCase, EvalSet
+from gridagent.evals.scoring import CheckResults, score
+from gridagent.llm.base import LLM, TokenUsage
+from gridagent.llm.pricing import estimate_cost_usd
+
+Mode = Literal["oracle", "replay", "live"]
+
+# Rough per-question token use for the live cost estimate (from M2 runs:
+# ~3 model calls; first-run cache writes dominate).
+EST_INPUT_TOKENS_PER_CASE = 6000
+EST_OUTPUT_TOKENS_PER_CASE = 450
+
+
+class CaseResult(BaseModel):
+    id: str
+    category: str
+    outcome: str
+    question: str
+    passed: bool
+    failed_checks: list[str]
+    checks: CheckResults
+    answer: str
+    tool_calls: list[dict[str, Any]]
+    status: str
+    error: str | None
+    steps: int
+    latency_s: float
+    usage: TokenUsage
+    cost_usd: float | None
+
+
+class Metrics(BaseModel):
+    n_cases: int
+    pass_rate: float
+    answer_accuracy: float | None  # numbers + dates correct, over answerable cases
+    grounding_rate: float | None  # expected numbers present in tool results
+    tool_use_correctness: float | None
+    refusal_correctness: float | None  # declined exactly when it should
+    no_data_correctness: float | None
+    source_citation_rate: float | None
+    error_rate: float
+    latency_p50_s: float | None
+    latency_p95_s: float | None
+    avg_input_tokens: float
+    avg_output_tokens: float
+    avg_cost_usd: float | None
+    total_cost_usd: float | None
+
+
+class EvalReport(BaseModel):
+    created_at: datetime
+    agent: str
+    agent_version: str
+    model: str
+    mode: Mode
+    eval_set: str
+    eval_set_version: str
+    eval_set_hash: str
+    today: str
+    notes: list[str]
+    metrics: Metrics
+    cases: list[CaseResult]
+
+
+def run_case(
+    agent: LoadedAgent, case: EvalCase, llm: LLM, data: DataProvider, eval_set: EvalSet
+) -> RunLog:
+    runner = Agent(agent, llm, data, today=lambda: eval_set.today)
+    return runner.run(case.question)
+
+
+def case_result(case: EvalCase, log: RunLog) -> CaseResult:
+    checks = score(case, log)
+    return CaseResult(
+        id=case.id,
+        category=case.category,
+        outcome=case.outcome,
+        question=case.question,
+        passed=checks.passed(),
+        failed_checks=checks.failed_checks(),
+        checks=checks,
+        answer=log.final_answer,
+        tool_calls=[
+            {"name": c.name, "input": c.input, "is_error": c.is_error} for c in log.tool_calls
+        ],
+        status=log.status,
+        error=log.error,
+        steps=len(log.steps),
+        latency_s=log.latency_s,
+        usage=log.usage,
+        cost_usd=log.cost_usd,
+    )
+
+
+def run_eval(
+    agent: LoadedAgent,
+    eval_set: EvalSet,
+    eval_set_hash: str,
+    mode: Mode,
+    model: str,
+    llm_for_case: Callable[[EvalCase], LLM],
+    data: DataProvider,
+    after_case: Callable[[EvalCase, RunLog, LLM], RunLog] | None = None,
+    progress: Callable[[int, int, CaseResult], None] | None = None,
+) -> EvalReport:
+    """Run every case. `after_case` lets the caller record or adjust each run log."""
+    results = []
+    for i, case in enumerate(eval_set.cases, start=1):
+        llm = llm_for_case(case)
+        log = run_case(agent, case, llm, data, eval_set)
+        if after_case is not None:
+            log = after_case(case, log, llm)
+        result = case_result(case, log)
+        results.append(result)
+        if progress is not None:
+            progress(i, len(eval_set.cases), result)
+
+    return EvalReport(
+        created_at=datetime.now(UTC),
+        agent=agent.config.name,
+        agent_version=agent.config.version,
+        model=model,
+        mode=mode,
+        eval_set=eval_set.name,
+        eval_set_version=eval_set.version,
+        eval_set_hash=eval_set_hash,
+        today=eval_set.today.isoformat(),
+        notes=mode_notes(mode),
+        metrics=compute_metrics(results),
+        cases=results,
+    )
+
+
+def mode_notes(mode: Mode) -> list[str]:
+    if mode == "oracle":
+        return [
+            "Oracle mode: a scripted perfect agent. Validates harness, tools, scoring and eval "
+            "set consistency. It does not measure model quality; latency and cost are not "
+            "meaningful."
+        ]
+    if mode == "replay":
+        return [
+            "Replay mode: recorded model turns are replayed; tools and scoring run again. "
+            "Latency and cost are those of the original live run. Prompt or model changes "
+            "need a new live run."
+        ]
+    return ["Live mode: real model calls on fixed fixture data."]
+
+
+def compute_metrics(results: list[CaseResult]) -> Metrics:
+    def rate(values: list[bool | None]) -> float | None:
+        applicable = [v for v in values if v is not None]
+        return round(sum(applicable) / len(applicable), 4) if applicable else None
+
+    answer_ok = [
+        None if r.checks.numbers is None else (r.checks.numbers and r.checks.dates is not False)
+        for r in results
+    ]
+    costs = [r.cost_usd for r in results]
+    known_costs = None if any(c is None for c in costs) else costs
+    latencies = sorted(r.latency_s for r in results)
+    n = len(results)
+    return Metrics(
+        n_cases=n,
+        pass_rate=round(sum(r.passed for r in results) / n, 4),
+        answer_accuracy=rate(answer_ok),
+        grounding_rate=rate([r.checks.grounded for r in results]),
+        tool_use_correctness=rate([r.checks.tool_use for r in results]),
+        refusal_correctness=rate([r.checks.refusal for r in results]),
+        no_data_correctness=rate([r.checks.no_data for r in results]),
+        source_citation_rate=rate([r.checks.source for r in results]),
+        error_rate=round(sum(not r.checks.no_error for r in results) / n, 4),
+        latency_p50_s=percentile(latencies, 50),
+        latency_p95_s=percentile(latencies, 95),
+        avg_input_tokens=round(sum(_input_tokens(r.usage) for r in results) / n, 1),
+        avg_output_tokens=round(sum(r.usage.output_tokens for r in results) / n, 1),
+        avg_cost_usd=None if known_costs is None else round(sum(known_costs) / n, 6),
+        total_cost_usd=None if known_costs is None else round(sum(known_costs), 6),
+    )
+
+
+def _input_tokens(usage: TokenUsage) -> int:
+    """All input tokens, cached or not (what the model actually read)."""
+    return usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
+
+
+def percentile(sorted_values: list[float], p: float) -> float | None:
+    """Nearest-rank percentile: the smallest value with at least p% of values <= it."""
+    if not sorted_values:
+        return None
+    rank = max(1, math.ceil(p / 100 * len(sorted_values)))
+    return round(sorted_values[rank - 1], 3)
+
+
+def estimate_live_cost(model: str, n_cases: int) -> float | None:
+    """Rough upper-end estimate of a live eval's cost in USD."""
+    per_case = estimate_cost_usd(
+        model,
+        TokenUsage(
+            input_tokens=EST_INPUT_TOKENS_PER_CASE, output_tokens=EST_OUTPUT_TOKENS_PER_CASE
+        ),
+    )
+    return None if per_case is None else per_case * n_cases

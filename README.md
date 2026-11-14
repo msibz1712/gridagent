@@ -40,3 +40,16 @@ uv run garden run energy_qa@0.1.0 "..."   # pin a version
 
 Layout: `agents/<name>/README.md` plus one folder per semantic version,
 `agents/<name>/<version>/{agent.yaml, system_prompt.md}`.
+
+## Evaluations
+
+```bash
+uv run garden eval energy_qa                       # offline: replay if recorded, else oracle (free)
+uv run garden eval energy_qa --live --record       # real model, asks before spending; saves for replay
+uv run garden eval energy_qa --live --record --model claude-haiku-5-5
+uv run garden compare reports/<sonnet>.json reports/<haiku>.json   # model vs model
+uv run garden compare energy_qa@0.1.0 energy_qa@0.2.0              # version vs version
+```
+
+Eval sets live in `agents/<name>/evals.yaml`; evals always use the fixture data and a
+fixed "today", so results are reproducible. Reports (Markdown + JSON) go to `reports/`.

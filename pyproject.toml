@@ -42,7 +42,7 @@ select = ["E", "W", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["gridagent"]
-known-local-folder = ["conftest"]  # tests import shared helpers from tests/conftest.py
+known-local-folder = ["conftest", "independent_calc"]  # local test helper modules
 
 # ---------- pytest ----------
 [tool.pytest.ini_options]

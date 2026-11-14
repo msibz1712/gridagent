@@ -94,3 +94,68 @@ def test_new_rejects_bad_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     result = runner.invoke(cli.app, ["new", "Bad-Name", "--owner", "x", "--description", "y" * 20])
     assert result.exit_code == 1
     assert "snake_case" in result.output
+
+
+def test_eval_offline_uses_oracle_and_writes_reports(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("GARDEN_REPORTS_DIR", str(tmp_path))
+    result = runner.invoke(cli.app, ["eval", "energy_qa", "--min-pass-rate", "1.0"])
+    assert result.exit_code == 0, result.output
+    assert "oracle" in result.output and "100.0%" in result.output
+    assert len(list(tmp_path.glob("*.md"))) == 1 and len(list(tmp_path.glob("*.json"))) == 1
+
+
+def test_eval_min_pass_rate_fails_ci(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("GARDEN_REPORTS_DIR", str(tmp_path))
+    monkeypatch.setattr(cli, "evaluate", _fake_evaluate_with_pass_rate(0.5))
+    result = runner.invoke(cli.app, ["eval", "energy_qa", "--min-pass-rate", "0.9"])
+    assert result.exit_code == 1
+    assert "below" in result.output
+
+
+def _fake_evaluate_with_pass_rate(rate: float):
+    from gridagent.evals.session import evaluate
+
+    def fake(*args, **kwargs):
+        report, path = evaluate(*args, **kwargs)
+        report.metrics.pass_rate = rate
+        return report, path
+
+    return fake
+
+
+def test_eval_live_asks_before_spending(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    called = []
+    monkeypatch.setattr(cli, "evaluate", lambda *a, **k: called.append(1))
+    result = runner.invoke(cli.app, ["eval", "energy_qa", "--live"], input="n\n")
+    assert result.exit_code == 0
+    assert "estimated cost about $" in result.output
+    assert called == []  # declined -> nothing ran
+
+
+def test_eval_live_requires_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(ROOT)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    result = runner.invoke(cli.app, ["eval", "energy_qa", "--live", "--yes"])
+    assert result.exit_code == 1
+
+
+def test_record_requires_live(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(ROOT)
+    assert runner.invoke(cli.app, ["eval", "energy_qa", "--record"]).exit_code == 1
+
+
+def test_compare_two_versions_offline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("GARDEN_REPORTS_DIR", str(tmp_path))
+    result = runner.invoke(
+        cli.app, ["compare", "energy_qa@0.1.0", "energy_qa@0.1.0"], terminal_width=200
+    )
+    assert result.exit_code == 0, result.output
+    assert "Broken in B: none" in result.output
+    assert len(list(tmp_path.glob("compare_*.md"))) == 1
