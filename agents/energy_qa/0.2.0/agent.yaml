@@ -1,0 +1,20 @@
+name: energy_qa
+version: 0.2.0
+description: Answers questions about German electricity generation and day-ahead prices using Energy-Charts data.
+owner: msibz1712
+model:
+  name: claude-haiku-5-5  # 0.2.0: ~20x cheaper per token than claude-sonnet-5-5
+  max_tokens: 16000
+  effort: medium
+  refusal_fallback: false  # no server-side refusal fallback for Haiku 5.5
+tools:
+  - get_generation
+  - get_day_ahead_price
+  - compute_stats
+limits:
+  max_steps: 8
+  model_timeout_seconds: 60
+  model_max_retries: 2
+  run_timeout_seconds: 180
+system_prompt_file: system_prompt.md
+eval_set: ../evals.yaml

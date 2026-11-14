@@ -27,7 +27,8 @@ def test_page_loads_without_errors(app: AppTest) -> None:
     app.run()
     assert not app.exception
     assert app.title[0].value == "⚡ GridAgent"
-    assert app.sidebar.selectbox[0].value == "energy_qa@0.1.0"
+    assert app.sidebar.selectbox[0].value == "energy_qa@0.2.0"  # latest version
+    assert app.sidebar.selectbox[1].value == "claude-haiku-5-5"  # its default model
 
 
 def test_live_ask_is_disabled_without_api_key(app: AppTest) -> None:

@@ -14,7 +14,7 @@ from gridagent.garden.registry import resolve
 from conftest import FIXTURE_DIR
 
 AGENTS = Path(__file__).parent.parent / "agents"
-agent = resolve(AGENTS, "energy_qa")
+agent = resolve(AGENTS, "energy_qa@0.1.0")
 eval_set, _ = load_agent_eval_set(agent)
 WIND_CASE = next(c for c in eval_set.cases if c.id == "wind_share_last_week")
 
@@ -24,7 +24,7 @@ def demo_log():
 
 
 def test_valid_specs_lists_newest_first() -> None:
-    assert services.valid_specs(AGENTS)[0] == "energy_qa@0.1.0"
+    assert services.valid_specs(AGENTS)[:2] == ["energy_qa@0.2.0", "energy_qa@0.1.0"]
 
 
 def test_oracle_demo_runs_real_tools() -> None:
@@ -54,6 +54,15 @@ def test_build_llm_uses_agent_config() -> None:
     assert llm.model_name == "claude-sonnet-5-5"
     assert llm.effort == agent.config.model.effort
     assert services.build_llm(agent.config, "claude-haiku-5-5").model_name == "claude-haiku-5-5"
+
+
+def test_latest_energy_qa_uses_haiku_for_cost() -> None:
+    """0.2.0 switched the default model to Haiku 5.5 (no server-side refusal fallback)."""
+    latest = resolve(AGENTS, "energy_qa")
+    assert latest.spec == "energy_qa@0.2.0"
+    llm = services.build_llm(latest.config)
+    assert llm.model_name == "claude-haiku-5-5"
+    assert llm.use_fallback is False
 
 
 def test_runs_roundtrip_and_summary(tmp_path: Path) -> None:

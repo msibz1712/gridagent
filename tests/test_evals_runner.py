@@ -24,14 +24,14 @@ from gridagent.llm.fake import FakeLLM, text
 from conftest import FIXTURE_DIR
 
 AGENTS = Path(__file__).parent.parent / "agents"
-agent = resolve(AGENTS, "energy_qa")
+agent = resolve(AGENTS, "energy_qa@0.1.0")  # pinned: tests eval mechanics
 eval_set, eval_hash = load_agent_eval_set(agent)
 
 
 def agent_in(tmp_path: Path):
     """A copy of energy_qa@0.1.0 in tmp_path (with its eval set), for recording tests."""
     shutil.copytree(AGENTS / "energy_qa", tmp_path / "energy_qa")
-    return resolve(tmp_path, "energy_qa")
+    return resolve(tmp_path, "energy_qa@0.1.0")
 
 
 def run_with(llm_for_case, mode="live"):

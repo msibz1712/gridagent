@@ -4,8 +4,8 @@ Answers questions about Germany's electricity system (generation by source, load
 day-ahead prices) using public data from Energy-Charts (Fraunhofer ISE).
 
 - **Owner:** msibz1712
-- **Current version:** 0.1.0 (one folder per version; semantic versioning)
-- **Model:** set in `agent.yaml` (default `claude-sonnet-5-5`; `claude-haiku-5-5` for comparison)
+- **Current version:** 0.2.0 (one folder per version; semantic versioning)
+- **Model:** set in `agent.yaml`: `claude-haiku-5-5` since 0.2.0 (0.1.0 uses `claude-sonnet-5-5`)
 
 ## What it does
 
@@ -53,11 +53,12 @@ and computed results enter the model's context.
 
 ```bash
 uv run garden run energy_qa "What was the average day-ahead price yesterday?"
-uv run garden run energy_qa@0.1.0 "..." --fixtures --today 2026-11-14   # pinned, offline data
+uv run garden run energy_qa@0.1.0 "..." --fixtures --today 2026-11-14   # pin the Sonnet version
 ```
 
 ## Versions
 
 | Version | Changes |
 |---|---|
+| 0.2.0 | Default model switched to Claude Haiku 5.5 to cut cost (~20x cheaper per token). Prompt and tools unchanged. Quality vs 0.1.0 not yet measured live: run `garden eval energy_qa@0.1.0 --live` and `garden eval energy_qa@0.2.0 --live`, then `garden compare`. |
 | 0.1.0 | First version: three tools, Sonnet 5.5 at medium effort. |

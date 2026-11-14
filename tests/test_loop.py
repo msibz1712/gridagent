@@ -27,7 +27,7 @@ MEAN_CALL = tool_use(
 
 
 def make_agent(llm: FakeLLM, **limits) -> Agent:
-    loaded = resolve(AGENTS_DIR, "energy_qa")
+    loaded = resolve(AGENTS_DIR, "energy_qa@0.1.0")
     if limits:
         loaded.config.limits = loaded.config.limits.model_copy(update=limits)
     return Agent(loaded, llm, FixtureDataSource(FIXTURE_DIR), today=lambda: TODAY)
@@ -124,7 +124,7 @@ def test_model_error_is_logged_not_raised() -> None:
 
 def test_run_timeout() -> None:
     times = iter([0.0, 0.0, 1.0, 1.0, 1.0, 999.0, 999.0, 999.0])
-    loaded = resolve(AGENTS_DIR, "energy_qa")
+    loaded = resolve(AGENTS_DIR, "energy_qa@0.1.0")
     agent = Agent(
         loaded,
         FakeLLM([[PRICE_CALL]] * 5),
