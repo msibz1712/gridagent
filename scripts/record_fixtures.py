@@ -19,17 +19,37 @@ PAUSE_SECONDS = 35  # stay under ~2 requests/minute per endpoint
 
 # (file name, endpoint, params, end date)
 FIXTURES = [
-    ("public_power_de_2026-11-02_2026-11-08.json", "/v2/public_power",
-     {"country": "de", "start": "2026-11-02", "end": "2026-11-08"}, date(2026, 11, 8)),
-    ("public_power_de_2026-10-01_2026-10-31.json", "/v2/public_power",
-     {"country": "de", "start": "2026-10-01", "end": "2026-10-31"}, date(2026, 10, 31)),
-    ("price_DE-LU_2026-11-13.json", "/v2/price",
-     {"bzn": "DE-LU", "start": "2026-11-13", "end": "2026-11-13"}, date(2026, 11, 13)),
-    ("price_DE-LU_2026-11-02_2026-11-08.json", "/v2/price",
-     {"bzn": "DE-LU", "start": "2026-11-02", "end": "2026-11-08"}, date(2026, 11, 8)),
-    ("price_DE-LU_2026-10-01_2026-10-31.json", "/v2/price",
-     {"bzn": "DE-LU", "start": "2026-10-01", "end": "2026-10-31"}, date(2026, 10, 31)),
-]  # fmt: skip
+    (
+        "public_power_de_2026-11-02_2026-11-08.json",
+        "/v2/public_power",
+        {"country": "de", "start": "2026-11-02", "end": "2026-11-08"},
+        date(2026, 11, 8),
+    ),
+    (
+        "public_power_de_2026-10-01_2026-10-31.json",
+        "/v2/public_power",
+        {"country": "de", "start": "2026-10-01", "end": "2026-10-31"},
+        date(2026, 10, 31),
+    ),
+    (
+        "price_DE-LU_2026-11-13.json",
+        "/v2/price",
+        {"bzn": "DE-LU", "start": "2026-11-13", "end": "2026-11-13"},
+        date(2026, 11, 13),
+    ),
+    (
+        "price_DE-LU_2026-11-02_2026-11-08.json",
+        "/v2/price",
+        {"bzn": "DE-LU", "start": "2026-11-02", "end": "2026-11-08"},
+        date(2026, 11, 8),
+    ),
+    (
+        "price_DE-LU_2026-10-01_2026-10-31.json",
+        "/v2/price",
+        {"bzn": "DE-LU", "start": "2026-10-01", "end": "2026-10-31"},
+        date(2026, 10, 31),
+    ),
+]
 
 
 def main() -> None:
