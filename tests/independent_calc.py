@@ -97,3 +97,40 @@ def capture_price(gen: list[dict], prices: list[dict], source: str) -> float:
 
 def between(data: list[dict], start: str, end: str) -> list[dict]:
     return [r for r in data if start <= r["timestamp"][:10] <= end]
+
+
+# ---- weather (0.6.0): hour-by-hour in UTC, written out again on purpose ----
+
+
+def utc_hour(timestamp: str) -> str:
+    """'2026-10-25T02:15:00+01:00' -> the UTC hour it falls in, as text."""
+    from datetime import UTC, datetime
+
+    return datetime.fromisoformat(timestamp).astimezone(UTC).strftime("%Y-%m-%dT%H")
+
+
+def hourly(data: list[dict], fn) -> dict[str, float]:
+    buckets: dict[str, list[float]] = defaultdict(list)
+    for r in data:
+        buckets[utc_hour(r["timestamp"])].append(fn(r))
+    return {h: sum(v) / len(v) for h, v in buckets.items()}
+
+
+def weather_hours(name: str, series: str) -> dict[str, float]:
+    return {utc_hour(r["timestamp"]): r["values"][series] for r in rows(name)}
+
+
+def hours_where(weather: str, rules: list[tuple[str, float | None, float | None]]) -> set[str]:
+    """Hours in which every (series, below, above) rule holds."""
+    selected = None
+    for series, below, above in rules:
+        values = weather_hours(weather, series)
+        hits = {h for h, v in values.items()
+                if (below is None or v < below) and (above is None or v > above)}  # fmt: skip
+        selected = hits if selected is None else selected & hits
+    return selected or set()
+
+
+def mean_when(target: dict[str, float], hours: set[str]) -> float:
+    picked = [target[h] for h in hours if h in target]
+    return sum(picked) / len(picked)

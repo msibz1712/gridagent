@@ -62,7 +62,7 @@ NO_DATA_PHRASES = (
 )
 SOURCE_PHRASES = (
     "energy-charts", "smard", "fraunhofer", "umweltbundesamt", "uba", "bdew",
-    "netztransparenz", "energiebilanzen",
+    "netztransparenz", "energiebilanzen", "dwd", "wetterdienst",
 )  # fmt: skip
 MONTHS = [
     "january",
@@ -161,7 +161,8 @@ def _same(expected: Any, actual: Any) -> bool:
 # Refs are internal ids that depend on fetch order, so they are never compared.
 # compare_values inputs are free-form (order, labels, unit spelling); whether the
 # comparison was right is checked through the numbers in the answer instead.
-IGNORED_ARGS = {"ref", "weight_ref", "a", "b", "a_label", "b_label", "unit"}
+# compute_when conditions carry refs and free threshold choices; checked via the numbers.
+IGNORED_ARGS = {"ref", "weight_ref", "a", "b", "a_label", "b_label", "unit", "conditions"}
 
 
 def call_matches(expected: ExpectedToolCall, actual: dict[str, Any]) -> bool:

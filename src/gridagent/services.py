@@ -160,6 +160,8 @@ class Budget:
 # ---------- presentation: plain language for end users ----------
 
 SOURCE_LABELS = {
+    "wind_speed": "wind speed (DWD stations, ~10 m above ground)",
+    "solar_radiation": "solar radiation (DWD stations)",
     "solar": "solar",
     "wind": "wind (onshore + offshore)",
     "wind_onshore": "onshore wind",
@@ -199,6 +201,11 @@ SMARD_SOURCE = {
     "url": "https://www.smard.de",
     "license": "CC BY 4.0",
 }
+WEATHER_SOURCE = {
+    "name": "Deutscher Wetterdienst (DWD), station observations",
+    "url": "https://opendata.dwd.de",
+    "license": "CC BY 4.0",
+}
 OPERATION_WORDS = {
     "count_below": "Counted the hours below",
     "count_above": "Counted the hours above",
@@ -236,6 +243,11 @@ def _fetch_step(call: ToolCallLog) -> str:
         )
     elif call.name == "get_day_ahead_price":
         what = "day-ahead electricity prices (Germany–Luxembourg)"
+    elif call.name == "get_weather":
+        what = "hourly wind speed and solar radiation for Germany (65 DWD stations)"
+        if call.is_error:
+            return f"Looked for {what} for {period}: no data available"
+        return f"Retrieved {what} for {period}"
     elif call.name == "get_cross_border_flows":
         kind = "physical" if args.get("kind") == "physical" else "scheduled commercial"
         what = f"{kind} cross-border electricity flows between Germany and its neighbours"
@@ -284,6 +296,8 @@ def method_step(call: ToolCallLog, where: str = "") -> str:
         text = _reference_step(call)
     elif call.name == "compute_stats":
         text = _stats_step(call, where)
+    elif call.name == "compute_when":
+        text = _when_step(call)
     elif call.name == "compare_values":
         a, b = call.input.get("a_label", "the first value"), call.input.get("b_label", "the second")
         text = f"Compared {a} with {b} (difference, percentage difference and ratio)"
@@ -299,6 +313,23 @@ def _reference_step(call: ToolCallLog) -> str:
         title = "an official statistic"
     period = call.input.get("period")
     return f"Looked up the official figure: {title}" + (f" ({period})" if period else "")
+
+
+def _when_step(call: ToolCallLog) -> str:
+    args = call.input
+    rules = []
+    for c in args.get("conditions", []):
+        name = source_label(c.get("source")) if c.get("source") else "the price"
+        bounds = [f"above {c['above']:g}" if c.get("above") is not None else "",
+                  f"below {c['below']:g}" if c.get("below") is not None else ""]  # fmt: skip
+        rules.append(f"{name} {' and '.join(b for b in bounds if b)}")
+    selected = "the hours in which " + " and ".join(rules)
+    if args.get("operation") == "hours":
+        return f"Counted {selected}"
+    subject = source_label(args.get("source")) if args.get("source") else "the price"
+    word = {"mean": "average", "min": "lowest", "max": "highest", "energy": "total energy"}
+    return f"Calculated the {word.get(args.get('operation'), args.get('operation'))} of "\
+           f"{subject} in {selected}"  # fmt: skip
 
 
 def method_steps(log: RunLog, toolbox: ToolBox | None = None) -> list[str]:
@@ -338,6 +369,8 @@ def sources_for_run(log: RunLog) -> list[dict[str, str]]:
         sources.append(PRICE_SOURCE)
     if "get_regional_generation" in names:
         sources.append(SMARD_SOURCE)
+    if "get_weather" in names:
+        sources.append(WEATHER_SOURCE)
     for call in ok:
         if call.name != "get_reference_statistics":
             continue
@@ -390,6 +423,12 @@ def bucket_size(series: Series, max_points: int = MAX_CHART_POINTS) -> int:
 def _chart_title(response_endpoint: str, source: str, region: str | None) -> str:
     if response_endpoint == "price":
         return "Day-ahead electricity price, Germany–Luxembourg"
+    if response_endpoint == "weather":
+        return (
+            "Mean wind speed, Germany (DWD, ~10 m)"
+            if source == "wind_speed"
+            else ("Mean solar radiation, Germany (DWD)")
+        )
     if response_endpoint in ("cbpf", "cbet"):
         kind = "physical" if response_endpoint == "cbpf" else "commercial"
         return f"Net {kind} imports: {source_label(source)} (negative = export)"
@@ -416,6 +455,12 @@ def charts_for_run(log: RunLog, data: DataProvider, toolbox: ToolBox | None = No
         if call.name in REF_PREFIX:
             if toolbox is None:
                 replay.execute(call.name, call.input)
+        elif call.name == "compute_when":
+            inputs = call.input
+            pairs = [(c.get("ref", ""), c.get("source")) for c in inputs.get("conditions", [])]
+            if inputs.get("ref"):
+                pairs.append((inputs["ref"], inputs.get("source")))
+            wanted += [p for p in pairs if p not in wanted]
         elif call.name == "compute_stats":
             inputs = call.input
             if inputs.get("operation") == "capture_price" and inputs.get("weight_ref"):

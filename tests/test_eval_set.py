@@ -21,6 +21,14 @@ PRICE_WEEK = ic.rows("price_DE-LU_2026-11-02_2026-11-08.json")
 PRICE_OCT = ic.rows("price_DE-LU_2026-10-01_2026-10-31.json")
 P = "day_ahead_price"
 CBPF = "cbpf_de_2026-11-02_2026-11-08.json"
+W_WEEK = "weather_de_2026-11-02_2026-11-08.json"
+W_OCT = "weather_de_2026-10-01_2026-10-31.json"
+CALM, WINDY = [("wind_speed", 3, None)], [("wind_speed", None, 5)]
+DARK_CALM = [("wind_speed", 3, None), ("solar_radiation", 50, None)]
+
+
+def _hourly_price_october() -> dict[str, float]:
+    return ic.hourly(PRICE_OCT, lambda r: r["values"][P])
 
 
 def _installed(year: str, column: str) -> float:
@@ -93,6 +101,15 @@ INDEPENDENT = {
     "followup_wind_solar_ratio": lambda: (
         round(ic.share_pct(GEN_WEEK, "wind"), 2) / round(ic.share_pct(GEN_WEEK, "solar"), 2)
     ),
+    # ---- Weather (0.6.0), hour by hour in UTC ----
+    "wind_speed_last_week": lambda: sum(ic.weather_hours(W_WEEK, "wind_speed").values()) / 168,
+    "price_calm_vs_windy_october": lambda: ic.mean_when(
+        _hourly_price_october(), ic.hours_where(W_OCT, CALM)
+    ),
+    "dunkelflaute_hours_october": lambda: len(ic.hours_where(W_OCT, DARK_CALM)),
+    "followup_gas_in_dunkelflaute": lambda: ic.mean_when(
+        ic.hourly(GEN_OCT, lambda r: r["values"]["fossil_gas"]), ic.hours_where(W_OCT, DARK_CALM)
+    ),
     # Published figures: checked against the curated reference file instead.
     "co2_factor_2025": lambda: _reference("co2_intensity_electricity_mix", "2025"),
     "official_renewable_share_2025": lambda: _reference("renewable_share_gross_generation", "2025"),
@@ -110,7 +127,7 @@ def test_eval_set_size_and_coverage() -> None:
     core = [c for c in eval_set.cases if c.min_version is None]
     assert any(c.previous for c in eval_set.cases)  # conversations are covered
     assert 20 <= len(core) <= 30
-    assert len(eval_set.cases) <= 50
+    assert len(eval_set.cases) <= 60  # kept small: every live run costs money
     categories = {c.category for c in eval_set.cases}
     assert {"factual", "tool_use", "ambiguous", "missing_data", "future", "refusal"} <= categories
 
@@ -136,6 +153,9 @@ SECOND_NUMBERS = {
     "solar_market_value_october": lambda: _official_solar_october(),
     "solar_market_value_difference_official": lambda: _official_solar_october(),
     "price_week_vs_october": lambda: ic.mean(PRICE_OCT, P),
+    "price_calm_vs_windy_october": lambda: ic.mean_when(
+        _hourly_price_october(), ic.hours_where(W_OCT, WINDY)
+    ),
 }
 
 

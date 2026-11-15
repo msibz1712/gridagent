@@ -629,3 +629,74 @@ cases:
     tool_calls:
       - {name: compare_values, args: {a: 23.3, b: 7.75, a_label: "wind share", b_label: "solar share", unit: "%"}}
     oracle_answer: "From 2 to 8 November 2026 wind's share of public net generation (23.3%) was 3.006 times solar's (7.75%). Source: Energy-Charts.info (Fraunhofer ISE)"
+
+  # ================= Weather (agent 0.6.0+): DWD indicators and conditions -> effect =================
+  - id: wind_speed_last_week
+    category: factual
+    min_version: 0.6.0
+    question: How windy was it in Germany last week?
+    outcome: answer
+    numbers: [{label: mean wind speed m/s, values: [3.34], tolerance_abs: 0.05}]
+    dates: ["2026-11-02", "2026-11-08"]
+    mentions: [["DWD", "Wetterdienst"], ["10 m", "indicator", "station"]]
+    tool_calls:
+      - {name: get_weather, args: {start: "2026-11-02", end: "2026-11-08"}}
+      - {name: compute_stats, args: {operation: mean, source: wind_speed}}
+    oracle_answer: "From 2 to 8 November 2026 the mean wind speed in Germany was 3.34 m/s, averaged over 65 DWD weather stations. Station wind is measured about 10 m above ground, so this is an indicator of how windy it was, not the wind at turbine height. Source: Deutscher Wetterdienst (DWD)"
+
+  - id: price_calm_vs_windy_october
+    category: tool_use
+    min_version: 0.6.0
+    question: In October 2026, how did the day-ahead price in hours with little wind compare with windy hours?
+    outcome: answer
+    numbers:
+      - {label: mean price calm hours, values: [214.84]}
+      - {label: mean price windy hours, values: [62.61]}
+    dates: ["2026-10-01", "2026-10-31"]
+    mentions: [["3 m/s"], ["5 m/s"]]
+    tool_calls:
+      - {name: get_weather, args: {start: "2026-10-01", end: "2026-10-31"}}
+      - {name: get_day_ahead_price, args: {start: "2026-10-01", end: "2026-10-31"}}
+      - {name: compute_when, args: {operation: mean, ref: price_2, source: null, conditions: [{ref: weather_1, source: wind_speed, below: 3, above: null}]}}
+      - {name: compute_when, args: {operation: mean, ref: price_2, source: null, conditions: [{ref: weather_1, source: wind_speed, below: null, above: 5}]}}
+    oracle_answer: "In October 2026 the day-ahead price averaged 214.84 EUR/MWh in the 304 hours with little wind (DWD station mean below 3 m/s) and 62.61 EUR/MWh in the 144 windy hours (above 5 m/s). The thresholds are my assumption, and this shows an association, not proof of cause: demand and gas prices also matter. Sources: Deutscher Wetterdienst (DWD); Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+
+  - id: dunkelflaute_hours_october
+    category: tool_use
+    min_version: 0.6.0
+    question: How many hours in October 2026 had neither wind nor sun?
+    outcome: answer
+    numbers: [{label: hours, values: [209]}]
+    dates: ["2026-10-01", "2026-10-31"]
+    mentions: [["3 m/s"], ["50 W/m"]]
+    tool_calls:
+      - {name: get_weather, args: {start: "2026-10-01", end: "2026-10-31"}}
+      - {name: compute_when, args: {operation: hours, ref: null, source: null, conditions: [{ref: weather_1, source: wind_speed, below: 3, above: null}, {ref: weather_1, source: solar_radiation, below: 50, above: null}]}}
+    oracle_answer: "In October 2026, 209 hours (28.05% of the month) had both little wind (DWD station mean below 3 m/s) and little or no sun (solar radiation below 50 W/m²). These thresholds are my assumption, not an official Dunkelflaute definition. Source: Deutscher Wetterdienst (DWD)"
+
+  - id: followup_gas_in_dunkelflaute
+    category: tool_use
+    min_version: 0.6.0
+    previous:
+      - question: How many hours in October 2026 had neither wind nor sun?
+        tool_calls:
+          - {name: get_weather, args: {start: "2026-10-01", end: "2026-10-31"}}
+          - {name: compute_when, args: {operation: hours, ref: null, source: null, conditions: [{ref: weather_1, source: wind_speed, below: 3, above: null}, {ref: weather_1, source: solar_radiation, below: 50, above: null}]}}
+        oracle_answer: "In October 2026, 209 hours had both little wind (below 3 m/s) and little sun (below 50 W/m²), by my thresholds. Source: Deutscher Wetterdienst (DWD)"
+    question: How much power did gas plants produce on average in those hours?
+    outcome: answer
+    numbers: [{label: mean gas MW, values: [9310.27, 9.31]}]
+    dates: ["2026-10-01", "2026-10-31"]
+    tool_calls:
+      - {name: get_generation, args: {start: "2026-10-01", end: "2026-10-31"}}
+      - {name: compute_when, args: {operation: mean, ref: gen_2, source: gas, conditions: [{ref: weather_1, source: wind_speed, below: 3, above: null}, {ref: weather_1, source: solar_radiation, below: 50, above: null}]}}
+    oracle_answer: "In those 209 hours of October 2026 with little wind and sun (below 3 m/s and 50 W/m²), gas-fired plants generated 9310.27 MW on average (public net generation). Sources: Energy-Charts.info (Fraunhofer ISE); Deutscher Wetterdienst (DWD)"
+
+  - id: weather_today_not_available
+    category: missing_data
+    min_version: 0.6.0
+    question: How windy is it in Germany today?
+    outcome: no_data
+    tool_calls:
+      - {name: get_weather, args: {start: "2026-11-14", end: "2026-11-14"}}
+    oracle_answer: "The DWD weather observations I use are only available up to yesterday, so today's wind is not yet available. I can tell you how windy it was yesterday or last week instead."

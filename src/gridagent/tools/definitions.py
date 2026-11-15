@@ -26,8 +26,11 @@ CAPACITY_TECHNOLOGIES = [
     "fossil_oil", "nuclear",
 ]  # fmt: skip
 
+WEATHER_SERIES = ["wind_speed", "solar_radiation"]
 # Every name compute_stats accepts as `source`, across all kinds of refs.
-ALL_SERIES_NAMES = sorted(set(available_sources()) | set(SMARD_SOURCES) | set(NEIGHBOURS) | {"sum"})
+ALL_SERIES_NAMES = sorted(
+    set(available_sources()) | set(SMARD_SOURCES) | set(NEIGHBOURS) | {"sum"} | set(WEATHER_SERIES)
+)
 
 DATE = {
     "type": "string",
@@ -237,6 +240,72 @@ COMPUTE_STATS: dict[str, Any] = {
     "strict": True,
 }
 
+GET_WEATHER: dict[str, Any] = {
+    "name": "get_weather",
+    "description": (
+        "Fetch hourly weather indicators for Germany from the Deutscher Wetterdienst (DWD) "
+        "for whole days from `start` to `end` inclusive (data up to yesterday). Series: "
+        "'wind_speed' (m/s, mean wind measured ~10 m above ground) and 'solar_radiation' "
+        "(W/m², global horizontal irradiance), each the plain mean over a fixed set of 65 DWD "
+        "stations. Returns a summary with a `ref` for compute_stats (mean/min/max/"
+        "count_below/count_above with `source`) and compute_when. Station wind is an "
+        "indicator of how windy it was, not the wind at turbine hub height (100-150 m): say "
+        "so when you use it. Max 93 days per call."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {"start": DATE, "end": DATE},
+        "required": ["start", "end"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
+_CONDITION = {
+    "type": "object",
+    "properties": {
+        "ref": {"type": "string", "description": "Ref whose values decide which hours count."},
+        "source": _nullable(
+            {"type": "string", "enum": ALL_SERIES_NAMES},
+            "Series in that ref (null for a price ref), e.g. wind_speed.",
+        ),
+        "below": _nullable({"type": "number"}, "Hour counts if the value is below this."),
+        "above": _nullable({"type": "number"}, "Hour counts if the value is above this."),
+    },
+    "required": ["ref", "source", "below", "above"],
+    "additionalProperties": False,
+}
+
+COMPUTE_WHEN: dict[str, Any] = {
+    "name": "compute_when",
+    "description": (
+        "Conditions -> effect: select the hours in which ALL `conditions` hold (e.g. wind_speed "
+        "below 3 m/s, solar_radiation below 50 W/m²), then compute `operation` on the target "
+        "series (`ref` + `source`) in exactly those hours. Everything is compared as hourly "
+        "means. operation 'hours' counts the selected hours (ref and source may be null); "
+        "'mean', 'min', 'max' work on any series; 'energy' sums a MW series to MWh. Returns the "
+        "value, hours_selected, hours_considered and share_of_hours_pct. Use it for questions "
+        "like 'average price when there was little wind' or 'how many hours with neither wind "
+        "nor sun (Dunkelflaute)'. The condition and target refs must cover the same period. "
+        "State the thresholds you used: they are your choice, not an official definition."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "operation": {"type": "string", "enum": ["hours", "mean", "min", "max", "energy"]},
+            "ref": _nullable({"type": "string"}, "Target ref (null for 'hours')."),
+            "source": _nullable(
+                {"type": "string", "enum": ALL_SERIES_NAMES},
+                "Target series (null for price refs and for 'hours').",
+            ),
+            "conditions": {"type": "array", "items": _CONDITION, "minItems": 1, "maxItems": 3},
+        },
+        "required": ["operation", "ref", "source", "conditions"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
 COMPARE_VALUES: dict[str, Any] = {
     "name": "compare_values",
     "description": (
@@ -274,6 +343,8 @@ ALL_TOOLS: dict[str, dict[str, Any]] = {
         GET_REFERENCE_STATISTICS,
         COMPUTE_STATS,
         COMPARE_VALUES,
+        GET_WEATHER,
+        COMPUTE_WHEN,
     )
 }
 
@@ -283,4 +354,5 @@ REF_PREFIX = {
     "get_day_ahead_price": "price",
     "get_cross_border_flows": "flow",
     "get_regional_generation": "region",
+    "get_weather": "weather",
 }

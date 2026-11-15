@@ -52,7 +52,7 @@ def test_valid_config_loads_with_defaults(tmp_path: Path) -> None:
         ({"model": {"name": "gpt-4"}}, "model.name: must be a Claude model id"),
         ({"model": {"name": "claude-haiku-5-5", "effort": "hgh"}}, "model.effort"),
         ({"model": {"name": "claude-haiku-5-5", "temperature": 0}}, "unknown field (typo?)"),
-        ({"tools": ["get_weather"]}, "unknown tool(s) ['get_weather']"),
+        ({"tools": ["get_stock_prices"]}, "unknown tool(s) ['get_stock_prices']"),
         ({"tools": ["compute_stats", "compute_stats"]}, "duplicates"),
         ({"tools": []}, "tools"),
         ({"description": "short"}, "description"),

@@ -25,6 +25,7 @@ from gridagent.data.models import Series, TimeSeriesResponse
 from gridagent.data.provider import DataProvider
 from gridagent.data.reference import lookup
 from gridagent.data.sources import SOURCE_GROUPS, available_sources, source_series
+from gridagent.tools.conditional import Condition, stats_when
 from gridagent.tools.definitions import ALL_TOOLS, CAPACITY_TECHNOLOGIES, REF_PREFIX
 from gridagent.tools.grounding import extract_numbers, is_backed
 from gridagent.tools.stats import Operation, StatsResult, capacity_factor, compute_stats, daily
@@ -39,6 +40,7 @@ DATA_SOURCE = {
     "cbpf": f"{ENERGY_CHARTS}, physical cross-border flows",
     "cbet": f"{ENERGY_CHARTS}, scheduled commercial exchanges",
     "smard": "SMARD.de (Bundesnetzagentur)",
+    "weather": "Deutscher Wetterdienst (DWD), 65 stations",
 }
 # Installed-capacity series used for capacity factors (solar: AC = inverter capacity).
 CAPACITY_SERIES = {
@@ -116,6 +118,20 @@ class CompareInput(_Input):
     unit: str
 
 
+class ConditionInput(_Input):
+    ref: str
+    source: str | None = None
+    below: float | None = None
+    above: float | None = None
+
+
+class WhenInput(_Input):
+    operation: Literal["hours", "mean", "min", "max", "energy"]
+    ref: str | None = None
+    source: str | None = None
+    conditions: list[ConditionInput] = Field(min_length=1, max_length=3)
+
+
 class ToolInputError(Exception):
     """The model asked for something invalid; message is shown to the model."""
 
@@ -159,6 +175,8 @@ class ToolBox:
             "get_reference_statistics": self._get_reference_statistics,
             "compute_stats": self._compute_stats,
             "compare_values": self._compare_values,
+            "get_weather": self._get_weather,
+            "compute_when": self._compute_when,
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
@@ -261,6 +279,39 @@ class ToolBox:
         return lookup(args.dataset, args.period)
 
     # ---------- compute ----------
+
+    def _get_weather(self, raw: dict[str, Any]) -> dict[str, Any]:
+        args = PeriodInput.model_validate(raw)
+        # DWD publishes observations up to yesterday.
+        self._check_period(args.start, args.end, latest=self.today() - timedelta(days=1))
+        response = self.data.weather(args.start, args.end)
+        ref = self._save("get_weather", response)
+        return self._summary(ref, response, args.start, args.end) | {
+            "series": {s.id: s.unit for s in response.series},
+            "caveat": response.attributes.get("caveat", ""),
+        }
+
+    def _compute_when(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Conditions -> effect (see conditional.py)."""
+        args = WhenInput.model_validate(raw)
+        conditions = []
+        for c in args.conditions:
+            if c.below is None and c.above is None:
+                raise ToolInputError(f"Condition on {c.ref} needs `below` and/or `above`.")
+            series = self.series_for(self._ref(c.ref), c.source)
+            conditions.append(Condition(series, below=c.below, above=c.above))
+        target = None
+        if args.operation != "hours":
+            if args.ref is None:
+                raise ToolInputError(f"'{args.operation}' needs a target `ref`.")
+            target = self.series_for(self._ref(args.ref), args.source)
+        result = stats_when(args.operation, conditions, target)
+        if result.get("value") is not None:
+            if result["unit"] == "EUR / MWh":
+                result["value_ct_per_kwh"] = round(result["value"] / 10, 3)
+            elif result["unit"] == "MWh":
+                result["value_gwh"] = round(result["value"] / 1000, 2)
+        return result
 
     def _compare_values(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Difference, % difference, ratio and sum of two numbers the tools produced."""
