@@ -181,3 +181,28 @@ def test_data_source_outage_is_a_tool_error() -> None:
 
     box = ToolBox(Broken(), today=lambda: TODAY)
     assert "unavailable" in error(box, "get_day_ahead_price", start="2026-11-13", end="2026-11-13")
+
+
+# Keywords the API rejects in strict tool schemas (found the hard way: a live run of 0.6.0
+# failed with "For 'array' type, property 'maxItems' is not supported"). Limits like these
+# are enforced by the ToolBox's pydantic models instead.
+UNSUPPORTED_IN_STRICT = {"maxItems", "minimum", "maximum", "minLength", "maxLength"}
+
+
+def _keywords(schema) -> set[str]:
+    if isinstance(schema, dict):
+        found = set(schema)
+        for value in schema.values():
+            found |= _keywords(value)
+        return found
+    if isinstance(schema, list):
+        return set().union(*(_keywords(v) for v in schema)) if schema else set()
+    return set()
+
+
+def test_strict_schemas_use_only_supported_keywords() -> None:
+    from gridagent.tools.definitions import ALL_TOOLS
+
+    for name, tool in ALL_TOOLS.items():
+        bad = _keywords(tool["input_schema"]) & UNSUPPORTED_IN_STRICT
+        assert not bad, f"{name} uses {bad}"

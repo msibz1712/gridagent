@@ -697,6 +697,6 @@ cases:
     min_version: 0.6.0
     question: How windy is it in Germany today?
     outcome: no_data
-    tool_calls:
-      - {name: get_weather, args: {start: "2026-11-14", end: "2026-11-14"}}
+    # No tool call required: the tool description says data ends yesterday, and the live
+    # model (correctly) answered without trying today. Asking for it would test the wrong thing.
     oracle_answer: "The DWD weather observations I use are only available up to yesterday, so today's wind is not yet available. I can tell you how windy it was yesterday or last week instead."

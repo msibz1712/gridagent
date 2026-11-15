@@ -298,7 +298,13 @@ COMPUTE_WHEN: dict[str, Any] = {
                 {"type": "string", "enum": ALL_SERIES_NAMES},
                 "Target series (null for price refs and for 'hours').",
             ),
-            "conditions": {"type": "array", "items": _CONDITION, "minItems": 1, "maxItems": 3},
+            # At most 3, checked by the ToolBox: strict schemas don't support maxItems.
+            "conditions": {
+                "type": "array",
+                "items": _CONDITION,
+                "minItems": 1,
+                "description": "1 to 3 conditions; all must hold.",
+            },
         },
         "required": ["operation", "ref", "source", "conditions"],
         "additionalProperties": False,

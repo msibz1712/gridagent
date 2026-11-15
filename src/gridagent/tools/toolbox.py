@@ -448,6 +448,10 @@ class ToolBox:
             "data_until": rows[-1].timestamp.isoformat() if rows else None,
             "n_intervals": len(rows),
             "interval_minutes": response.interval_minutes,
+            # e.g. 2,980 quarter-hours = 745 hours (October with the extra DST hour)
+            "hours_covered": len(rows) * response.interval_minutes / 60
+            if response.interval_minutes
+            else None,
             "unit": response.unit,
             "timezone": response.timezone,
             "data_source": DATA_SOURCE.get(response.endpoint, ENERGY_CHARTS),
