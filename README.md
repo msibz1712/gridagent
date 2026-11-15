@@ -21,9 +21,9 @@ memory or mental arithmetic, and that is checked automatically on every answer.
 *(Unedited answer from a live evaluation run of agent 0.7.0 on Claude Haiku 5.5: it fetched
 prices and weather, ran four conditional calculations and one comparison, all in code.)*
 
-**At a glance:** 13 tools · 62-question eval set · **98.3%** live pass rate · **100%**
-of refusals and missing-data cases handled correctly · about **$0.001 and 7 s per
-question** · 417 tests · CI with free replay of real model answers · Docker · PostgreSQL
+**At a glance:** 13 tools · 62-question eval set · **95–98%** live pass rate on the
+latest versions · **100%** of out-of-scope questions declined correctly · about **$0.001
+and 7 s per question** · 417 tests · CI with free replay of real model answers · Docker · PostgreSQL
 (Supabase) with 1.5 million rows since 2018.
 
 ---
@@ -119,17 +119,21 @@ their new features):
 | 0.4.0 | follow-up conversations | 47 | 93.6% | the model worked out differences in its head |
 | 0.5.0 | `compare_values` + grounding check | 50 | 96.0% | follow-up differences still mental |
 | 0.6.0 | DWD weather, `compute_when` | 55 | 94.5% (98.2% after test fixes) | the eval itself was too strict once |
-| **0.7.0** | neighbouring markets, follow-up rule | **59** | **98.3%** | one count used hourly averages instead of 15-minute prices |
+| 0.7.0 | neighbouring markets, follow-up rule | 59 | 98.3% | one count used hourly averages instead of 15-minute prices |
+| **0.8.0** | grid congestion (redispatch) | **62** | **95.0%** (60 run before the cost limit) | a flipped price-spread sign in a follow-up; tools now spell signs out, and the re-run got it right |
 
-Every number in the 0.7.0 answers was within ±1% except that one hourly count, and
-refusals, missing data and source citation were 100%. Average cost was $0.0009 per
-question (prompt caching, Haiku), median latency 7 s.
+In 0.8.0 the expected numbers were within ±1% in every answer, though one wrong answer
+matched only by coincidence ("92" hours vs 91.22 GWh) and was failed by the stricter
+grounding checks, which is why there are several. Refusals and source citation were 100%.
+Average cost was $0.0010 per question (prompt caching, Haiku; it grows with the number of
+tool descriptions), median latency 7 s. After fixing the tools and two over-strict grader
+rules, the recorded answers replay at 100%; CI re-checks them on every push.
 
 Things the evaluations and checks caught along the way, each now covered by a test: mental
 arithmetic in answers; a misrounded expected answer in the eval set itself; a 4×
 undercount of negative-price hours for years with hourly prices; two daylight-saving bugs
 (the repeated hour when clocks go back); data sources that would have returned German
-prices for a French request; and a tool schema the API rejects (the API refused before the
+prices for a French request; a price-spread sign read the wrong way round; and a tool schema the API rejects (the API refused before the
 model ran, so it cost nothing; a schema test and a one-question smoke test now come first).
 
 ## Data sources and licences
