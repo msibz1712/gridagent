@@ -285,6 +285,15 @@ def eval_command(
     min_pass_rate: Annotated[
         float | None, typer.Option(help="Exit with code 1 if pass rate is below this (0-1)")
     ] = None,
+    case_ids: Annotated[
+        list[str] | None, typer.Option("--case", help="Only this case id (repeatable)")
+    ] = None,
+    categories: Annotated[
+        list[str] | None, typer.Option("--category", help="Only this category (repeatable)")
+    ] = None,
+    max_cost: Annotated[
+        float, typer.Option(help="With --live: hard limit in USD; no new case starts above it")
+    ] = 0.50,
 ) -> None:
     """Evaluate an agent on its eval set (offline by default; --live for real calls)."""
     if record and not live:
@@ -297,28 +306,41 @@ def eval_command(
         console.print(f"[red]Could not load:[/]\n{exc}")
         raise typer.Exit(code=1) from exc
 
+    def only(case) -> bool:
+        return (not case_ids or case.id in case_ids) and (
+            not categories or case.category in categories
+        )
+
+    cases, skipped = supported_cases(loaded, eval_set)
+    cases = [c for c in cases if only(c)]
+    unknown = sorted(set(case_ids or []) - {c.id for c in eval_set.cases})
+    if unknown or not cases:
+        console.print(f"[red]No cases selected[/] (unknown ids: {unknown or '-'})")
+        raise typer.Exit(code=1)
+
     model_name = model or loaded.config.model.name
     if live:
         _require_api_key()
         mode = "live"
-        estimate = estimate_live_cost(model_name, len(eval_set.cases))
+        turns = sum(1 + len(c.previous) for c in cases)
+        estimate = estimate_live_cost(model_name, turns)
         cost = f"about ${estimate:.2f}" if estimate is not None else "unknown (no price data)"
         console.print(
-            f"Live eval: {len(eval_set.cases)} questions on [bold]{model_name}[/], "
-            f"estimated cost {cost} (rough upper estimate)."
+            f"Live eval: {len(cases)} questions ({turns} model turns) on [bold]{model_name}[/]\n"
+            f"estimated cost {cost}; hard limit ${max_cost:.2f}"
         )
         if not yes and not typer.confirm("Continue?", default=False):
             raise typer.Exit(code=0)
     else:
         mode = "oracle" if oracle else choose_offline_mode(loaded, model_name)
 
-    cases, skipped = supported_cases(loaded, eval_set)
     skipped_text = f", {len(skipped)} skipped (need a newer version)" if skipped else ""
     console.print(f"Evaluating {loaded.spec} ({mode}, {len(cases)} cases{skipped_text})")
     try:
         report, rec_path = evaluate(
-            loaded, model_name, mode, FIXTURE_DIR, record=record, progress=_print_progress
-        )
+            loaded, model_name, mode, FIXTURE_DIR, record=record, progress=_print_progress,
+            only=only, max_cost_usd=max_cost if live else None,
+        )  # fmt: skip
     except AgentConfigError as exc:
         console.print(f"[red]{exc}[/]")
         raise typer.Exit(code=1) from exc

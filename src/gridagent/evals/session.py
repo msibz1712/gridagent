@@ -42,6 +42,8 @@ def evaluate(
     fixture_dir: Path,
     record: bool = False,
     progress: Callable[[int, int, CaseResult], None] | None = None,
+    only: Callable[[EvalCase], bool] | None = None,
+    max_cost_usd: float | None = None,
 ) -> tuple[EvalReport, Path | None]:
     """Run the agent's eval set. Returns the report and the recording path (if written)."""
     eval_set, eval_hash = load_agent_eval_set(agent)
@@ -49,6 +51,10 @@ def evaluate(
     cfg = agent.config
     rec_path = recording_path(agent.directory, model)
     recording = new_recording(cfg.name, cfg.version, model, eval_hash) if record else None
+    previous = load_recording(rec_path) if record else None
+    if recording is not None and previous is not None and previous.eval_set_hash == eval_hash:
+        # Recording only some cases keeps the earlier recordings of the others.
+        recording.cases = dict(previous.cases)
     stored = None  # the recording being replayed (replay mode only)
 
     if mode == "live":
@@ -97,6 +103,8 @@ def evaluate(
         data,
         after_case=after_case,
         progress=progress,
+        only=only,
+        max_cost_usd=max_cost_usd,
     )
     if mode == "replay" and stored is not None and stored.eval_set_hash != eval_hash:
         report.notes.append("Recording was made with a different eval set version.")

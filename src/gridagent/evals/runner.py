@@ -127,15 +127,31 @@ def run_eval(
     data: DataProvider,
     after_case: Callable[[EvalCase, RunLog, LLM], RunLog] | None = None,
     progress: Callable[[int, int, CaseResult], None] | None = None,
+    only: Callable[[EvalCase], bool] | None = None,
+    max_cost_usd: float | None = None,
 ) -> EvalReport:
-    """Run every supported case. `after_case` lets the caller record or adjust each run log."""
+    """Run every supported case (or those `only` selects). `after_case` lets the caller
+    record or adjust each run log.
+
+    `max_cost_usd` is a hard spending limit: no new case starts once the cases so far
+    have cost that much, so a run can overshoot by at most one case (about $0.002 on
+    Haiku). Unfinished cases are listed in the report notes.
+    """
     cases, skipped = supported_cases(agent, eval_set)
+    if only is not None:
+        cases = [c for c in cases if only(c)]
     results = []
+    spent = 0.0
+    stopped: list[str] = []
     for i, case in enumerate(cases, start=1):
+        if max_cost_usd is not None and spent >= max_cost_usd:
+            stopped = [c.id for c in cases[i - 1 :]]
+            break
         llm = llm_for_case(case)
         log = run_case(agent, case, llm, data, eval_set)
         if after_case is not None:
             log = after_case(case, log, llm)
+        spent += log.cost_usd or 0.0
         result = case_result(case, log)
         results.append(result)
         if progress is not None:
@@ -151,7 +167,7 @@ def run_eval(
         eval_set_version=eval_set.version,
         eval_set_hash=eval_set_hash,
         today=eval_set.today.isoformat(),
-        notes=mode_notes(mode) + skipped_note(skipped),
+        notes=mode_notes(mode) + skipped_note(skipped) + _stopped_note(stopped, max_cost_usd),
         metrics=compute_metrics(results),
         cases=results,
     )
@@ -167,6 +183,13 @@ def supported_cases(agent: LoadedAgent, eval_set: EvalSet) -> tuple[list[EvalCas
         else:
             supported.append(case)
     return supported, skipped
+
+
+def _stopped_note(stopped: list[str], limit: float | None) -> list[str]:
+    if not stopped:
+        return []
+    return [f"Cost limit ${limit:.2f} reached: {len(stopped)} case(s) not run: "
+            f"{', '.join(stopped)}."]  # fmt: skip
 
 
 def skipped_note(skipped: list[str]) -> list[str]:

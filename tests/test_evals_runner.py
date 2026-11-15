@@ -238,3 +238,32 @@ def test_failed_earlier_turn_fails_the_case() -> None:
     llm = FakeLLM([LLMError("down"), [text("The highest price was 231.49 EUR/MWh.")]])
     log = run_case(latest, case, llm, FixtureDataSource(FIXTURE_DIR), eval_set)
     assert log.status == "error" and "Earlier turn failed" in log.error
+
+
+def test_cost_limit_stops_starting_new_cases() -> None:
+    """Each case 'costs' $0.01; with a $0.025 limit exactly three cases run."""
+    from gridagent.evals.offline import oracle_llm
+
+    eval_set, eval_hash = load_agent_eval_set(agent)
+
+    def pricey(case, log, llm):
+        log.cost_usd = 0.01
+        return log
+
+    report = run_eval(agent, eval_set, eval_hash, "oracle", "oracle", oracle_llm,
+                      FixtureDataSource(FIXTURE_DIR), after_case=pricey,
+                      max_cost_usd=0.025)  # fmt: skip
+    assert len(report.cases) == 3
+    (note,) = [n for n in report.notes if n.startswith("Cost limit")]
+    assert f"{len(report.cases)} case" not in note  # the note counts the cases NOT run
+    from gridagent.evals.runner import supported_cases
+
+    stopped = len(supported_cases(agent, eval_set)[0]) - len(report.cases)
+    assert f"{stopped} case(s) not run" in note
+
+
+def test_only_runs_the_selected_cases(tmp_path: Path) -> None:
+    loaded = agent_in(tmp_path)
+    report, _ = evaluate(loaded, "oracle", "oracle", FIXTURE_DIR,
+                         only=lambda c: c.category == "refusal")  # fmt: skip
+    assert report.cases and all(c.category == "refusal" for c in report.cases)
