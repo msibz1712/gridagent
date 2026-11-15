@@ -52,10 +52,23 @@
       </div>
 
       <div class="wrap narrow">
-        <div id="result" aria-live="polite"></div>
-        <div id="history-block" hidden>
-          <h2 class="section-title">Your recent questions</h2>
-          <ul class="history" id="history"></ul>
+        <div class="thread-head" id="thread-head" hidden>
+          <span class="muted small" id="turn-counter"></span>
+          <button class="btn btn-small" id="new-conversation" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New conversation</button>
+        </div>
+        <div id="thread" aria-live="polite"></div>
+      </div>
+
+      <div class="composer" id="composer" hidden>
+        <div class="wrap narrow">
+          <form class="search compact" id="followup-form" autocomplete="off">
+            <input id="followup" type="text" maxlength="500"
+                   placeholder="Ask a follow-up, e.g. “And the week before?” or “How does that compare with solar?”"
+                   aria-label="Follow-up question">
+            <button class="btn btn-primary" id="followup-btn" type="submit">Ask</button>
+          </form>
+          <p class="composer-note muted">Follow-ups build on the answers above. Conversations are kept for 30 minutes and then deleted.</p>
         </div>
       </div>
     </section>
@@ -114,7 +127,8 @@
         </div>
         <p class="muted small">GridAgent uses an AI assistant to interpret your question and present the result; the
           calculations themselves are done by deterministic code. Please check important figures against the original
-          sources linked with each answer. Questions are logged to monitor quality.</p>
+          sources linked with each answer. You can ask follow-up questions; a conversation is kept in memory for
+          30 minutes (or until you start a new one) and then deleted. Questions are logged to monitor quality.</p>
       </div>
     </section>
   </main>

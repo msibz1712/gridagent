@@ -40,6 +40,7 @@ uv run garden tools                # tools agents can use
 uv run garden new my_agent         # scaffold agents/my_agent/0.1.0 from the template
 uv run garden run energy_qa@0.1.0 "..."   # pin a version
 uv run garden runs                 # monitoring: recent runs, ok/error rate, latency, cost
+uv run garden chat energy_qa       # conversation in the terminal: follow-ups build on earlier answers
 ```
 
 Layout: `agents/<name>/README.md` plus one folder per semantic version,
@@ -53,9 +54,10 @@ set -a && source .env && set +a            # the website needs the API key
 uv run --extra web garden ui               # then open http://localhost:8000
 ```
 
-A clean question-and-answer site for researchers and analysts: ask a question and
-get the answer with the period, a chart of the underlying data (CSV download), a
-plain-language "How this was calculated" section and linked sources, plus an About
+A clean question-and-answer site for researchers and analysts. It is a conversation:
+follow-up questions ("And the week before?", "How does that compare with solar?") build
+on earlier answers (up to 10 questions; kept in memory for 30 minutes). Each answer states
+the period and comes with a chart of the underlying data (CSV download), a plain-language "How this was calculated" section and linked sources, plus an About
 page on coverage, method and limits. It deliberately shows no model, agent or
 evaluation details; those stay in the CLI (`garden eval`, `garden runs`, ...).
 

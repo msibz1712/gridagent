@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from gridagent import services
+from gridagent.agent.config import parse_semver
 from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import ToolCallLog, append_run_log
 from gridagent.data.fixture_source import FixtureDataSource
@@ -55,7 +56,7 @@ def test_build_llm_uses_agent_config() -> None:
 def test_latest_energy_qa_uses_haiku_for_cost() -> None:
     """Since 0.2.0 the default model is Haiku 5.5 (no server-side refusal fallback)."""
     latest = resolve(AGENTS, "energy_qa")
-    assert latest.spec == "energy_qa@0.3.0"
+    assert parse_semver(latest.config.version) >= (0, 2, 0)
     llm = services.build_llm(latest.config)
     assert llm.model_name == "claude-haiku-5-5"
     assert llm.use_fallback is False

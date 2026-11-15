@@ -34,31 +34,38 @@ STATS_DEFAULTS = {
 
 
 def oracle_llm(case: EvalCase) -> FakeLLM:
-    """One tool call per turn (in eval-set order), then the reference answer.
+    """Scripted turns for the whole conversation: earlier turns first, then the case.
 
+    Each turn makes its tool calls one per step and ends with its answer.
     compute_stats gets the most recent ref unless the eval case names one; refs
-    are numbered like the ToolBox does (gen_1, price_2, ...) in fetch order.
+    are numbered like the ToolBox does (gen_1, price_2, ...) across all turns,
+    because a conversation keeps one ToolBox.
     """
-    turns: list[list[dict[str, Any]]] = []
+    script: list[list[dict[str, Any]]] = []
     fetches = 0
     last_ref = None
-    for i, call in enumerate(case.tool_calls, start=1):
-        args = dict(call.args)
-        if call.name == "compute_stats":
-            args = {"ref": last_ref, **STATS_DEFAULTS, **args}
-        elif call.name in REF_PREFIX:
-            fetches += 1
-            last_ref = f"{REF_PREFIX[call.name]}_{fetches}"
-            if call.name == "get_generation":
-                args.setdefault("sources", None)
-                args.setdefault("scope", None)
-        elif call.name == "get_installed_capacity":
-            args.setdefault("technologies", None)
-        elif call.name == "get_reference_statistics":
-            args.setdefault("period", None)
-        turns.append([tool_use(call.name, args, tool_id=f"oracle_{i}")])
-    turns.append([text(case.oracle_answer)])
-    return FakeLLM(turns, model_name="oracle", usage=ORACLE_USAGE)
+    turns = [(t.tool_calls, t.oracle_answer) for t in case.previous]
+    turns.append((case.tool_calls, case.oracle_answer))
+    call_number = 0
+    for tool_calls, answer in turns:
+        for call in tool_calls:
+            call_number += 1
+            args = dict(call.args)
+            if call.name == "compute_stats":
+                args = {"ref": last_ref, **STATS_DEFAULTS, **args}
+            elif call.name in REF_PREFIX:
+                fetches += 1
+                last_ref = f"{REF_PREFIX[call.name]}_{fetches}"
+                if call.name == "get_generation":
+                    args.setdefault("sources", None)
+                    args.setdefault("scope", None)
+            elif call.name == "get_installed_capacity":
+                args.setdefault("technologies", None)
+            elif call.name == "get_reference_statistics":
+                args.setdefault("period", None)
+            script.append([tool_use(call.name, args, tool_id=f"oracle_{call_number}")])
+        script.append([text(answer)])
+    return FakeLLM(script, model_name="oracle", usage=ORACLE_USAGE)
 
 
 # ---------- recording ----------

@@ -1,7 +1,7 @@
 /* GridAgent website: plain JavaScript, no framework, no build step.
  *
  * Structure: helpers -> API client -> renderers (answer, chart, method) ->
- * ask flow + recent questions -> router and setup.
+ * conversation (thread of turns + follow-ups) -> router and setup.
  * Security: all text from the server is escaped before it is inserted; the
  * small Markdown renderer only adds formatting tags afterwards.
  */
@@ -96,7 +96,8 @@ async function api(path, options = {}) {
 
 // ---------- state ----------
 
-const state = { config: null, history: [], busy: false };
+// conversationId: null until the first answer; the server keeps the history.
+const state = { config: null, conversationId: null, busy: false };
 
 // ---------- chart ----------
 
@@ -238,18 +239,18 @@ function answerHtml(result) {
       <div class="text">${markdown(result.answer)}</div>
       <div class="answer-actions">
         <span class="muted">Asked ${esc(asked)} · reference ${esc(result.id)}</span>
-        <button class="btn btn-small" id="copy-answer">Copy answer</button>
+        <button class="btn btn-small copy-answer" type="button">Copy answer</button>
       </div>
     </article>
     ${charts}
     ${method}`;
 }
 
-function showResult(result) {
-  const container = $("#result");
-  container.innerHTML = answerHtml(result);
-  wireCharts(container, result.charts);
-  $("#copy-answer").addEventListener("click", async () => {
+/** Fill one turn of the thread with its answer, charts and copy button. */
+function showResult(turn, result) {
+  turn.querySelector(".turn-body").innerHTML = answerHtml(result);
+  wireCharts(turn, result.charts);
+  turn.querySelector(".copy-answer").addEventListener("click", async () => {
     const sources = result.sources.map((s) => `${s.name} (${s.url}), ${s.license}`).join("; ");
     const text = `${result.question}\n\n${result.answer}${sources ? `\n\nSources: ${sources}` : ""}`;
     try { await navigator.clipboard.writeText(text); toast("Answer copied to clipboard."); }
@@ -257,7 +258,36 @@ function showResult(result) {
   });
 }
 
-// ---------- ask flow ----------
+// ---------- conversation ----------
+
+function addTurn(question) {
+  const turn = document.createElement("section");
+  turn.className = "turn";
+  turn.innerHTML = `<div class="bubble"><span>${esc(question)}</span></div>
+    <div class="turn-body"><div class="card"><div class="loading-card"><div class="spinner"></div>
+      <span>Retrieving the data and calculating the answer…</span></div>
+      <div class="skeleton" style="width:92%"></div><div class="skeleton" style="width:74%"></div></div></div>`;
+  $("#thread").appendChild(turn);
+  return turn;
+}
+
+function setConversationMode(active) {
+  document.querySelector(".hero").classList.toggle("compact", active);
+  $("#thread-head").hidden = !active;
+  $("#composer").hidden = !active;
+}
+
+function updateTurnCounter(result) {
+  const asked = result.turn;
+  const total = result.turn + result.turns_left;
+  $("#turn-counter").textContent = `Question ${asked} of ${total} in this conversation`;
+  const full = result.turns_left === 0;
+  $("#followup").disabled = full;
+  $("#followup-btn").disabled = full || !state.config.available;
+  $("#followup").placeholder = full
+    ? "This conversation is full. Start a new conversation to ask more."
+    : "Ask a follow-up, e.g. “And the week before?” or “How does that compare with solar?”";
+}
 
 async function ask(question) {
   question = question.trim();
@@ -265,30 +295,53 @@ async function ask(question) {
   if (question.length < 3) { toast("Please type a question first."); return; }
   state.busy = true;
   $("#ask-btn").disabled = true;
-  $("#result").innerHTML = `<div class="card"><div class="loading-card"><div class="spinner"></div>
-    <span>Retrieving the data and calculating the answer…</span></div>
-    <div class="skeleton" style="width:92%"></div><div class="skeleton" style="width:74%"></div></div>`;
+  $("#followup-btn").disabled = true;
+  setConversationMode(true);
+  const turn = addTurn(question);
+  turn.scrollIntoView({ behavior: "smooth", block: "start" });
   try {
-    const result = await api("/api/ask", { method: "POST", body: JSON.stringify({ question }) });
-    showResult(result);
-    state.history.unshift(result);
-    renderHistory();
+    const result = await api("/api/ask", {
+      method: "POST",
+      body: JSON.stringify({ question, conversation_id: state.conversationId }),
+    });
+    if (result.new_conversation) {
+      $("#thread").insertBefore(noticeHtml(
+        "Your earlier conversation had expired, so this question started a new one."), turn);
+    }
+    state.conversationId = result.conversation_id;
+    showResult(turn, result);
+    updateTurnCounter(result);
+    $("#followup").value = "";
   } catch (error) {
-    $("#result").innerHTML = `<article class="card answer failed"><p class="question">${esc(question)}</p>
+    turn.querySelector(".turn-body").innerHTML = `<article class="card answer failed">
       <div class="text"><p>${esc(error.message)}</p></div></article>`;
   } finally {
     state.busy = false;
     $("#ask-btn").disabled = !state.config.available;
+    if (!$("#followup").disabled) $("#followup-btn").disabled = !state.config.available;
   }
 }
 
-function renderHistory() {
-  const previous = state.history.slice(1);
-  $("#history-block").hidden = previous.length === 0;
-  $("#history").innerHTML = previous.map((r, i) => `<li><button data-history="${i + 1}">
-    <span>${esc(r.question)}</span>
-    <span class="time">${esc(new Date(r.asked_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }))}</span>
-  </button></li>`).join("");
+function noticeHtml(message) {
+  const note = document.createElement("div");
+  note.className = "inline-note";
+  note.textContent = message;
+  return note;
+}
+
+function newConversation() {
+  if (state.conversationId) {
+    // Forget it on the server right away (privacy); ignore errors, it expires anyway.
+    fetch(`/api/conversations/${state.conversationId}`, { method: "DELETE" }).catch(() => {});
+  }
+  state.conversationId = null;
+  $("#thread").innerHTML = "";
+  $("#question").value = "";
+  $("#followup").value = "";
+  $("#followup").disabled = false;
+  setConversationMode(false);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  $("#question").focus();
 }
 
 // ---------- router & setup ----------
@@ -330,19 +383,17 @@ async function init() {
     event.preventDefault();
     ask($("#question").value);
   });
+  $("#followup-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    ask($("#followup").value);
+  });
   $("#examples").addEventListener("click", (event) => {
     const chip = event.target.closest(".chip");
     if (!chip) return;
     $("#question").value = chip.dataset.q;
     if (state.config.available) ask(chip.dataset.q);
   });
-  $("#history").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-history]");
-    if (button) {
-      showResult(state.history[Number(button.dataset.history)]);
-      $("#result").scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  });
+  $("#new-conversation").addEventListener("click", newConversation);
 }
 
 init();

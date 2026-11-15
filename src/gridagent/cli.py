@@ -1,6 +1,7 @@
 """Command-line interface for the Agent Garden (`garden`).
 
-Commands: `list`, `tools`, `validate`, `new`, `run`, `runs`, `eval`, `compare`, `ui`, `version`.
+Commands: `list`, `tools`, `validate`, `new`, `run`, `chat`, `runs`, `eval`, `compare`,
+`ui`, `version`.
 
 Paths are relative to the current directory and can be overridden with
 environment variables (useful in Docker):
@@ -23,6 +24,7 @@ from rich.table import Table
 
 from gridagent import __version__
 from gridagent.agent.config import AgentConfigError
+from gridagent.agent.conversation import ConversationLimitError
 from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import RunLog, append_run_log
 from gridagent.data.client import berlin_today
@@ -371,6 +373,66 @@ def compare_command(
     out = out_dir / f"compare_{stamp}.md"
     out.write_text(comparison_markdown(result))
     console.print(f"Comparison: {out}")
+
+
+@app.command()
+def chat(
+    agent: Annotated[str, typer.Argument(help="Agent, e.g. energy_qa or energy_qa@0.4.0")],
+    model: Annotated[str | None, typer.Option(help="Override the model from agent.yaml")] = None,
+    fixtures: Annotated[
+        bool, typer.Option("--fixtures", help="Use recorded fixture data instead of the live API")
+    ] = False,
+    today: Annotated[
+        str | None, typer.Option(help="Pretend today is YYYY-MM-DD (reproducible runs)")
+    ] = None,
+) -> None:
+    """Have a conversation: follow-up questions build on earlier answers.
+
+    Type /new for a new conversation, exit (or an empty line) to stop.
+    """
+    _require_api_key()
+    try:
+        loaded = resolve(_agents_dir(), agent)
+    except AgentConfigError as exc:
+        console.print(f"[red]Could not load agent '{agent}':[/]\n{exc}")
+        raise typer.Exit(code=1) from exc
+    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"))
+    fixed_today = date.fromisoformat(today) if today else None
+    runner = Agent(loaded, build_llm(loaded.config, model), data,
+                   today=lambda: fixed_today or berlin_today())  # fmt: skip
+    conversation = runner.new_conversation()
+    log_path = _path("GARDEN_LOG_DIR", "logs") / "runs.jsonl"
+    total_cost = 0.0
+    console.print(f"Chatting with {loaded.spec}. /new = new conversation, exit = stop.")
+
+    while True:
+        try:
+            question = console.input("[bold cyan]You:[/] ").strip()
+        except (EOFError, KeyboardInterrupt):
+            break
+        if question.lower() in ("", "exit", "quit"):
+            break
+        if question == "/new":
+            conversation = runner.new_conversation()
+            console.print("[dim]New conversation started.[/]")
+            continue
+        try:
+            with console.status("Thinking..."):
+                log = runner.run(question, conversation)
+        except ConversationLimitError as exc:
+            console.print(f"[yellow]{exc}[/] Type /new.")
+            continue
+        append_run_log(log_path, log)
+        total_cost += log.cost_usd or 0.0
+        style = "green" if log.status == "ok" else "red"
+        console.print(
+            Panel(log.final_answer, title=f"GridAgent ({log.status})", border_style=style)
+        )
+        console.print(
+            f"[dim]turn {log.turn} · {log.latency_s:.1f}s · {fmt(log.cost_usd, 'usd')} · "
+            f"{conversation.turns_left} questions left in this conversation[/]"
+        )
+    console.print(f"[dim]Session cost {fmt(total_cost, 'usd')}. Runs logged to {log_path}.[/]")
 
 
 @app.command()

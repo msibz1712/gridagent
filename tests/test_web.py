@@ -20,8 +20,13 @@ from conftest import FIXTURE_DIR  # noqa: E402
 ROOT = Path(__file__).parent.parent
 ANSWER = "The average was **161.73 EUR/MWh** on 13 Nov 2026. Source: SMARD.de via Energy-Charts"
 JARGON = ("model", "token", "tool", "cost", "agent", "oracle", "eval", "stop_reason", "usd")
-STATS = {"ref": "price_1", "operation": "mean", "source": None, "relative_to": None,
-         "per_day": False}  # fmt: skip
+STATS = {
+    "ref": "price_1",
+    "operation": "mean",
+    "source": None,
+    "relative_to": None,
+    "per_day": False,
+}
 PRICE_SCRIPT = [
     [tool_use("get_day_ahead_price", {"start": "2026-11-13", "end": "2026-11-13"})],
     [tool_use("compute_stats", STATS)],
@@ -117,7 +122,20 @@ def test_answer_payload_is_plain_language(
     assert body["sources"] == [services.PRICE_SOURCE]
     [chart] = body["charts"]
     assert len(chart["points"]) == 96 and chart["unit"] == "EUR / MWh"
-    expected_keys = {"id", "question", "answer", "status", "asked_at", "steps", "sources", "charts"}
+    expected_keys = {
+        "id",
+        "question",
+        "answer",
+        "status",
+        "asked_at",
+        "steps",
+        "sources",
+        "charts",
+        "conversation_id",
+        "turn",
+        "turns_left",
+        "new_conversation",
+    }
     assert set(body) == expected_keys
     visible = " ".join(body["steps"]).lower()
     assert not any(word in visible for word in JARGON)
@@ -154,3 +172,86 @@ def test_usage_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Non
     blocked = ask(client)
     assert blocked.status_code == 429
     assert "usage limit" in blocked.json()["detail"]
+
+
+# ---------- conversations ----------
+
+FOLLOW_UP_SCRIPT = [
+    [tool_use("get_day_ahead_price", {"start": "2026-11-13", "end": "2026-11-13"})],
+    [tool_use("compute_stats", STATS)],
+    [text(ANSWER)],
+    # follow-up: reuses price_1 from the first turn, no new fetch
+    [tool_use("compute_stats", STATS | {"operation": "max"})],
+    [text("The highest price that day was 231.49 EUR/MWh at 17:45. Source: SMARD.de")],
+]
+
+
+def test_follow_up_continues_the_conversation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = list(FOLLOW_UP_SCRIPT)
+    llm = FakeLLM(script, model_name="claude-haiku-5-5")
+    monkeypatch.setattr(services, "build_llm", lambda cfg, model=None: llm)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    first = ask(client).json()
+    assert first["turn"] == 1 and first["turns_left"] == 9
+    second = client.post(
+        "/api/ask",
+        json={
+            "question": "And the highest price that day?",
+            "conversation_id": first["conversation_id"],
+        },
+    ).json()
+    assert second["conversation_id"] == first["conversation_id"]
+    assert second["turn"] == 2 and second["turns_left"] == 8
+    assert "231.49" in second["answer"]
+    # The follow-up's chart comes from data fetched in turn 1.
+    [chart] = second["charts"]
+    assert chart["title"].startswith("Day-ahead") and len(chart["points"]) == 96
+    assert second["steps"] == ["Found the highest value of the price and when it occurred"]
+
+
+def test_expired_conversation_starts_a_new_one(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_model(monkeypatch)
+    body = client.post(
+        "/api/ask", json={"question": "Average price yesterday?", "conversation_id": "0" * 16}
+    ).json()
+    assert body["new_conversation"] is True and body["turn"] == 1
+    assert body["conversation_id"] != "0" * 16
+
+
+def test_conversation_limit(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
+    settings.max_turns = 1
+    limited = TestClient(create_app(settings))
+    fake_model(monkeypatch, turns=[[text("First answer.")]])
+    first = ask(limited).json()
+    assert first["turns_left"] == 0
+    second = limited.post(
+        "/api/ask", json={"question": "And then?", "conversation_id": first["conversation_id"]}
+    )
+    assert second.status_code == 409
+    assert "start a new conversation" in second.json()["detail"]
+
+
+def test_bad_conversation_id_is_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_model(monkeypatch)
+    response = client.post("/api/ask", json={"question": "hello there", "conversation_id": "../x"})
+    assert response.status_code == 422
+
+
+def test_delete_conversation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_model(monkeypatch)
+    conversation_id = ask(client).json()["conversation_id"]
+    assert client.delete(f"/api/conversations/{conversation_id}").status_code == 204
+    # A follow-up with the deleted id starts over.
+    fake_model(monkeypatch)
+    again = client.post(
+        "/api/ask",
+        json={"question": "Average price yesterday?", "conversation_id": conversation_id},
+    ).json()
+    assert again["new_conversation"] is True

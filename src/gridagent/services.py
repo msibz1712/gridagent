@@ -17,6 +17,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from gridagent.agent.config import AgentConfig, LoadedAgent
+from gridagent.agent.conversation import Conversation
 from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import RunLog, ToolCallLog, append_run_log
 from gridagent.data.client import EnergyChartsError
@@ -55,9 +56,11 @@ def ask(
     data: DataProvider,
     today: date,
     log_path: Path | None,
+    conversation: Conversation | None = None,
 ) -> RunLog:
-    """Run one question with the real model and append the run to the log."""
-    log = Agent(agent, build_llm(agent.config, model), data, today=lambda: today).run(question)
+    """Run one question (optionally as a follow-up) with the real model and log the run."""
+    runner = Agent(agent, build_llm(agent.config, model), data, today=lambda: today)
+    log = runner.run(question, conversation)
     if log_path is not None:
         append_run_log(log_path, log)
     return log
@@ -269,13 +272,21 @@ def _reference_step(call: ToolCallLog) -> str:
     return f"Looked up the official figure: {title}" + (f" ({period})" if period else "")
 
 
-def method_steps(log: RunLog) -> list[str]:
-    """All steps; calculations on regional data name their control area."""
+def method_steps(log: RunLog, toolbox: ToolBox | None = None) -> list[str]:
+    """All steps; calculations on regional data name their control area.
+
+    In a conversation, pass its ToolBox: a follow-up may calculate on data that
+    was fetched in an earlier turn and so does not appear in this run's log.
+    """
     region_of_ref: dict[str, str] = {}
+    if toolbox is not None:
+        for ref, response in toolbox.store.items():
+            if response.endpoint == "smard":
+                region_of_ref[ref] = response.attributes.get("region", "")
     fetches = 0
     steps = []
     for call in log.tool_calls:
-        if call.name in REF_PREFIX and not call.is_error:
+        if call.name in REF_PREFIX and not call.is_error and toolbox is None:
             fetches += 1  # the ToolBox numbers refs in this order (gen_1, region_2, ...)
             if call.name == "get_regional_generation":
                 region_of_ref[f"region_{fetches}"] = call.input.get("region", "")
@@ -360,20 +371,22 @@ def _chart_title(response_endpoint: str, source: str, region: str | None) -> str
     return f"{title}, {region} control area" if region else title
 
 
-def charts_for_run(log: RunLog, data: DataProvider) -> list[Chart]:
+def charts_for_run(log: RunLog, data: DataProvider, toolbox: ToolBox | None = None) -> list[Chart]:
     """Re-create the series the agent analysed, for plotting next to the answer.
 
-    The logged data calls are replayed in a fresh ToolBox (served from cache),
-    which reproduces exactly the same refs; then each compute_stats call's
-    series is taken from that ToolBox.
+    With a conversation's ToolBox, its stored data is used directly (follow-ups
+    may use refs from earlier turns). Otherwise the logged data calls are
+    replayed in a fresh ToolBox (served from cache), which reproduces exactly
+    the same refs.
     """
-    replay = ToolBox(data, today=lambda: date.fromisoformat(log.today))
+    replay = toolbox or ToolBox(data, today=lambda: date.fromisoformat(log.today))
     wanted: list[tuple[str, str | None]] = []
     for call in log.tool_calls:
         if call.is_error:
             continue
         if call.name in REF_PREFIX:
-            replay.execute(call.name, call.input)
+            if toolbox is None:
+                replay.execute(call.name, call.input)
         elif call.name == "compute_stats":
             inputs = call.input
             if inputs.get("operation") == "capture_price" and inputs.get("weight_ref"):

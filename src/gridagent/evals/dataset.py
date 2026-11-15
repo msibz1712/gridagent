@@ -44,6 +44,14 @@ class ExpectedToolCall(_Strict):
         return self
 
 
+class PreviousTurn(_Strict):
+    """An earlier question in the same conversation (only the final question is scored)."""
+
+    question: str = Field(min_length=3)
+    tool_calls: list[ExpectedToolCall] = []  # what the oracle does in this turn
+    oracle_answer: str
+
+
 class EvalCase(_Strict):
     id: str = Field(pattern=r"^[a-z0-9_]+$")
     category: Category
@@ -54,6 +62,8 @@ class EvalCase(_Strict):
     mentions: list[list[str]] = []  # each inner list: at least one must appear
     tool_calls: list[ExpectedToolCall] = []
     oracle_answer: str
+    # Earlier turns of a conversation; the case's own question is the follow-up.
+    previous: list[PreviousTurn] = []
     # First agent version that has the tools for this case; older versions skip it.
     min_version: str | None = Field(None, pattern=SEMVER_PATTERN)
 

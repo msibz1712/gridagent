@@ -172,15 +172,16 @@ def test_oracle_catches_a_tool_bug(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_new_cases_are_skipped_for_older_versions() -> None:
     report, _ = evaluate(agent, "oracle", "oracle", FIXTURE_DIR)  # agent is 0.1.0
-    assert report.metrics.n_cases == 29
-    assert any("13 case(s) skipped" in note for note in report.notes)
+    newer = [c for c in eval_set.cases if c.min_version]
+    assert report.metrics.n_cases == len(eval_set.cases) - len(newer)
+    assert any(f"{len(newer)} case(s) skipped" in note for note in report.notes)
 
 
 def test_latest_version_oracle_passes_all_cases() -> None:
     latest = resolve(AGENTS, "energy_qa")
     report, _ = evaluate(latest, "oracle", "oracle", FIXTURE_DIR)
     failures = {c.id: c.failed_checks for c in report.cases if not c.passed}
-    assert failures == {} and report.metrics.n_cases == 42
+    assert failures == {} and report.metrics.n_cases == len(eval_set.cases)
 
 
 def test_oracle_catches_a_broken_capture_price(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -208,3 +209,32 @@ def test_scoring_list_args_need_only_include_expected_items() -> None:
     assert not call_matches(
         expected, {"name": "get_regional_generation", "input": {"sources": ["load"]}}
     )
+
+
+def _followup_case():
+    latest = resolve(AGENTS, "energy_qa")
+    cases = {c.id: c for c in load_agent_eval_set(latest)[0].cases}
+    return latest, cases["followup_highest_price_same_day"]
+
+
+def test_multi_turn_cost_and_latency_include_earlier_turns() -> None:
+    from gridagent.evals.runner import run_case
+
+    latest, case = _followup_case()
+    usage = TokenUsage(input_tokens=1_000_000)  # $0.10 per model call at Haiku prices
+    llm = oracle_llm(case)
+    llm.model_name, llm.usage = "claude-haiku-5-5", usage
+    log = run_case(latest, case, llm, FixtureDataSource(FIXTURE_DIR), eval_set)
+    model_calls = len(case.previous[0].tool_calls) + 1 + len(case.tool_calls) + 1
+    assert log.status == "ok" and log.turn == 2
+    assert log.cost_usd == pytest.approx(0.10 * model_calls)
+
+
+def test_failed_earlier_turn_fails_the_case() -> None:
+    from gridagent.evals.runner import run_case
+    from gridagent.llm.base import LLMError
+
+    latest, case = _followup_case()
+    llm = FakeLLM([LLMError("down"), [text("The highest price was 231.49 EUR/MWh.")]])
+    log = run_case(latest, case, llm, FixtureDataSource(FIXTURE_DIR), eval_set)
+    assert log.status == "error" and "Earlier turn failed" in log.error

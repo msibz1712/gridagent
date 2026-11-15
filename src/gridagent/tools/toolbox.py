@@ -127,6 +127,9 @@ class ToolBox:
             raise ValueError(f"Unknown tools: {sorted(unknown)}")
         self.store: dict[str, TimeSeriesResponse] = {}
         self._counter = 0
+        # Successful data requests -> their summary. In a conversation the model may ask
+        # for the same data again; it then gets the existing ref instead of a copy.
+        self._fetched: dict[str, str] = {}
 
     def definitions(self) -> list[dict[str, Any]]:
         """Tool definitions for the API request, in a fixed order (stable for caching)."""
@@ -144,8 +147,16 @@ class ToolBox:
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
+        request_key = f"{name}:{json.dumps(tool_input, sort_keys=True)}"
+        if request_key in self._fetched:
+            summary = json.loads(self._fetched[request_key])
+            summary["note"] = "Same data as fetched earlier in this conversation: reuse this ref."
+            return ToolResult(content=json.dumps(summary))
         try:
-            return ToolResult(content=json.dumps(handlers[name](tool_input)))
+            content = json.dumps(handlers[name](tool_input))
+            if name in REF_PREFIX:
+                self._fetched[request_key] = content
+            return ToolResult(content=content)
         except ValidationError as exc:
             return ToolResult(content=f"Invalid input: {_short(exc)}", is_error=True)
         except (ToolInputError, KeyError, ValueError) as exc:

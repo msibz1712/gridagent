@@ -45,6 +45,8 @@ class RunLog(BaseModel):
     model: str  # requested model
     question: str
     today: str  # the date the agent treated as "today"
+    conversation_id: str | None = None  # same id for all questions of one conversation
+    turn: int = 1  # 1 = first question, 2 = first follow-up, ...
     status: RunStatus = "ok"
     final_answer: str = ""
     error: str | None = None

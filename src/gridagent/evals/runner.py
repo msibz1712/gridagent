@@ -78,8 +78,20 @@ class EvalReport(BaseModel):
 def run_case(
     agent: LoadedAgent, case: EvalCase, llm: LLM, data: DataProvider, eval_set: EvalSet
 ) -> RunLog:
+    """Run a case; with earlier turns, all in one conversation. Only the last turn is scored,
+    but its log's tokens, cost and latency include the earlier turns (what the user paid)."""
     runner = Agent(agent, llm, data, today=lambda: eval_set.today)
-    return runner.run(case.question)
+    conversation = runner.new_conversation()
+    earlier = [runner.run(turn.question, conversation) for turn in case.previous]
+    log = runner.run(case.question, conversation)
+    for previous in earlier:
+        log.usage = log.usage + previous.usage
+        log.latency_s = round(log.latency_s + previous.latency_s, 3)
+        if log.cost_usd is not None and previous.cost_usd is not None:
+            log.cost_usd += previous.cost_usd
+        if previous.status != "ok" and log.status == "ok":
+            log.status, log.error = "error", f"Earlier turn failed: {previous.error}"
+    return log
 
 
 def case_result(case: EvalCase, log: RunLog) -> CaseResult:

@@ -20,6 +20,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from gridagent.agent.config import LoadedAgent
+from gridagent.agent.conversation import Conversation
 from gridagent.agent.runlog import RESULT_PREVIEW_CHARS, RunLog, StepLog, ToolCallLog
 from gridagent.data.provider import DataProvider
 from gridagent.llm.base import LLM, LLMError, ModelResponse
@@ -30,12 +31,15 @@ REFUSAL_ANSWER = "Sorry, I can't help with that request."
 FAILURE_ANSWER = "Sorry, I couldn't complete this request. No answer was produced."
 
 
-def build_user_message(question: str, today: date) -> str:
+def build_user_message(question: str, today: date, follow_up: bool = False) -> str:
     """Put today's date in the user turn, not the system prompt.
 
     The system prompt must stay byte-identical between runs so it can be
-    prompt-cached; a date in it would change every day.
+    prompt-cached; a date in it would change every day. Follow-up questions in
+    a conversation don't repeat the date: it is already in the history.
     """
+    if follow_up:
+        return f"Follow-up question: {question}"
     return f"Today's date in Germany is {today.isoformat()} ({today:%A}).\n\nQuestion: {question}"
 
 
@@ -56,10 +60,24 @@ class Agent:
         self.today = today
         self._clock = clock  # injectable for timeout tests
 
-    def run(self, question: str) -> RunLog:
-        config = self.agent.config
+    def new_conversation(self) -> Conversation:
+        """A fresh conversation (not stored anywhere) with its own ToolBox."""
         today = self.today()
-        tools = ToolBox(self.data, today=lambda: today, enabled=config.tools)
+        tools = ToolBox(self.data, today=lambda: today, enabled=self.agent.config.tools)
+        return Conversation(toolbox=tools, today=today)
+
+    def run(self, question: str, conversation: Conversation | None = None) -> RunLog:
+        """Answer one question; with `conversation`, as a follow-up in that conversation.
+
+        The history is only appended to. If a turn fails (error, timeout, step
+        limit, refusal), everything it added is removed again, so a half-finished
+        turn (e.g. a tool call without its result) can never break the history.
+        """
+        config = self.agent.config
+        conversation = conversation or self.new_conversation()
+        conversation.check_capacity()
+        today, tools, messages = conversation.today, conversation.toolbox, conversation.messages
+        follow_up = conversation.turns > 0
         log = RunLog(
             run_id=uuid.uuid4().hex[:12],
             started_at=datetime.now(UTC),
@@ -68,10 +86,11 @@ class Agent:
             model=self.llm.model_name,
             question=question,
             today=today.isoformat(),
+            conversation_id=conversation.id,
+            turn=conversation.turns + 1,
         )
-        messages: list[dict[str, Any]] = [
-            {"role": "user", "content": build_user_message(question, today)}
-        ]
+        history_length = len(messages)
+        messages.append({"role": "user", "content": build_user_message(question, today, follow_up)})
         run_start = self._clock()
 
         try:
@@ -80,6 +99,10 @@ class Agent:
             log.status, log.error = "error", f"Unexpected error: {exc!r}"
             log.final_answer = FAILURE_ANSWER
 
+        if log.status == "ok":
+            conversation.turns += 1
+        else:
+            del messages[history_length:]  # roll back the failed turn
         log.latency_s = round(self._clock() - run_start, 3)
         return log
 

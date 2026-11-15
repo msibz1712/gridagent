@@ -191,3 +191,24 @@ def test_ui_host_option_warns_when_not_local(monkeypatch: pytest.MonkeyPatch) ->
     assert result.exit_code == 0
     assert calls[0]["host"] == "0.0.0.0"
     assert "reachable from other machines" in result.output
+
+
+def test_chat_keeps_the_conversation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setenv("GARDEN_LOG_DIR", str(tmp_path))
+    fake = FakeLLM([[text("Wind was 23.3%.")], [text("Solar was 7.74%.")], [text("Fresh start.")]])
+    monkeypatch.setattr(cli, "build_llm", lambda cfg, model=None: fake)
+
+    result = runner.invoke(
+        cli.app,
+        ["chat", "energy_qa", "--fixtures", "--today", "2026-11-14"],
+        input="Wind share last week?\nAnd solar?\n/new\nHello again\nexit\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "Solar was 7.74%." in result.output and "New conversation started." in result.output
+    logs = [json.loads(line) for line in (tmp_path / "runs.jsonl").read_text().splitlines()]
+    assert [log["turn"] for log in logs] == [1, 2, 1]
+    assert logs[0]["conversation_id"] == logs[1]["conversation_id"] != logs[2]["conversation_id"]
+    # The second request carried the first question and answer.
+    assert len(fake.requests[1]["messages"]) == 3

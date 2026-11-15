@@ -79,6 +79,11 @@ INDEPENDENT = {
     "renewable_share_total_scope": lambda: ic.share_pct(
         ic.rows("total_power_de_2026-11-02_2026-11-08.json"), "renewable"
     ),
+    # ---- Conversations (0.4.0): the follow-up's expected number ----
+    "followup_solar_after_wind": lambda: ic.share_pct(GEN_WEEK, "solar"),
+    "followup_highest_price_same_day": lambda: ic.peak(PRICE_YDAY, P)[0],
+    "followup_compare_control_area": lambda: sum(ic.smard_week(4068, "50Hertz")) / 1000,
+    "followup_market_value_wind": lambda: ic.capture_price(GEN_OCT, PRICE_OCT, "wind_onshore"),
     # Published figures: checked against the curated reference file instead.
     "co2_factor_2025": lambda: _reference("co2_intensity_electricity_mix", "2025"),
     "official_renewable_share_2025": lambda: _reference("renewable_share_gross_generation", "2025"),
@@ -94,8 +99,9 @@ NUMERIC_CASES = [c for c in eval_set.cases if c.numbers]
 def test_eval_set_size_and_coverage() -> None:
     # The spec asked for 20-30 core questions; Stage 1 adds 13 for the new data sources.
     core = [c for c in eval_set.cases if c.min_version is None]
+    assert any(c.previous for c in eval_set.cases)  # conversations are covered
     assert 20 <= len(core) <= 30
-    assert len(eval_set.cases) <= 45
+    assert len(eval_set.cases) <= 50
     categories = {c.category for c in eval_set.cases}
     assert {"factual", "tool_use", "ambiguous", "missing_data", "future", "refusal"} <= categories
 

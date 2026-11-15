@@ -4,7 +4,7 @@ Answers questions about Germany's electricity system (generation by source, load
 day-ahead prices) using public data from Energy-Charts (Fraunhofer ISE).
 
 - **Owner:** msibz1712
-- **Current version:** 0.3.0 (one folder per version; semantic versioning)
+- **Current version:** 0.4.0 (one folder per version; semantic versioning)
 - **Model:** set in `agent.yaml`: `claude-haiku-5-5` since 0.2.0 (0.1.0 uses `claude-sonnet-5-5`)
 
 ## What it does
@@ -80,6 +80,7 @@ uv run garden run energy_qa@0.1.0 "..." --fixtures --today 2026-11-14   # pin th
 
 | Version | Changes |
 |---|---|
+| 0.4.0 | Conversations: follow-up questions build on earlier turns (same period/source/region unless changed, reuse fetched data, every answer still self-contained). Multi-turn eval cases. |
 | 0.3.0 | Stage 1 data: cross-border flows, control areas (SMARD), installed capacity and targets, total generation incl. industry, official reference figures; capture prices, threshold counts, capacity factors; prompt asks to state definitions and official figures. 13 new eval cases. |
 | 0.2.0 | Default model switched to Claude Haiku 5.5 to cut cost (~20x cheaper per token). Prompt and tools unchanged. Quality vs 0.1.0 not yet measured live: run `garden eval energy_qa@0.1.0 --live` and `garden eval energy_qa@0.2.0 --live`, then `garden compare`. |
 | 0.1.0 | First version: three tools, Sonnet 5.5 at medium effort. |

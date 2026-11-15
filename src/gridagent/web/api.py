@@ -6,7 +6,8 @@ model, token or evaluation details; those live in the `garden` CLI.
 
     GET  /api/health   liveness check (for Docker / monitoring)
     GET  /api/config   whether the service is available + example questions
-    POST /api/ask      answer a question: answer, method, sources, charts
+    POST /api/ask      answer a question (optionally a follow-up in a conversation)
+    DELETE /api/conversations/{id}   forget a conversation now
 
 Configuration (environment variables):
     GARDEN_WEB_AGENT        agent spec to serve (default: energy_qa = latest version)
@@ -28,11 +29,13 @@ from pydantic import BaseModel, Field
 
 from gridagent import __version__, services
 from gridagent.agent.config import AgentConfigError, LoadedAgent
+from gridagent.agent.conversation import ConversationLimitError, ConversationStore
 from gridagent.agent.runlog import RunLog
 from gridagent.data.client import berlin_today
 from gridagent.evals.runner import estimate_live_cost
 from gridagent.evals.session import load_agent_eval_set
 from gridagent.garden.registry import resolve
+from gridagent.tools.toolbox import ToolBox
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -66,6 +69,7 @@ class Settings:
     budget_usd: float = field(
         default_factory=lambda: float(os.environ.get("GARDEN_UI_BUDGET_USD", "1.00"))
     )
+    max_turns: int = 10  # questions per conversation
 
 
 def _env(name: str, default: str) -> Path:
@@ -74,11 +78,15 @@ def _env(name: str, default: str) -> Path:
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=500)
+    # Continue this conversation; null (or an expired id) starts a new one.
+    conversation_id: str | None = Field(None, pattern=r"^[0-9a-f]{16}$")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     budget = services.Budget(limit_usd=settings.budget_usd)
+    conversations = ConversationStore(max_turns=settings.max_turns)
+    data = services.build_data(settings.use_fixtures, settings.fixture_dir, settings.cache_dir)
     app = FastAPI(title="GridAgent", version=__version__, docs_url="/api/docs")
 
     def load_agent() -> LoadedAgent:
@@ -122,10 +130,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=429,
                 detail="The service has reached its usage limit for now. Please try again later.",
             )
-        data = services.build_data(settings.use_fixtures, settings.fixture_dir, settings.cache_dir)
-        log = services.ask(agent, request.question, None, data, today_for(agent), settings.log_path)
+        conversation = conversations.get(request.conversation_id)
+        new_conversation = conversation is None
+        if conversation is None:
+            today = today_for(agent)
+            toolbox = ToolBox(data, today=lambda: today, enabled=agent.config.tools)
+            conversation = conversations.start(toolbox, today)
+        try:
+            conversation.check_capacity()
+        except ConversationLimitError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        log = services.ask(agent, request.question, None, data, conversation.today,
+                           settings.log_path, conversation)  # fmt: skip
         budget.add(log.cost_usd)
-        return answer_payload(log, data)
+        payload = answer_payload(log, data, conversation.toolbox)
+        return payload | {
+            "conversation_id": conversation.id,
+            "turn": log.turn,
+            "turns_left": conversation.turns_left,
+            # True if the client sent an id that had expired: the UI can say so.
+            "new_conversation": new_conversation and request.conversation_id is not None,
+        }
+
+    @app.delete("/api/conversations/{conversation_id}", status_code=204)
+    def end_conversation(conversation_id: str) -> None:
+        """Forget a conversation now (the "New conversation" button), not after 30 minutes."""
+        conversations.delete(conversation_id)
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -136,7 +167,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def answer_payload(log: RunLog, data: services.DataProvider) -> dict[str, Any]:
+def answer_payload(
+    log: RunLog, data: services.DataProvider, toolbox: ToolBox | None = None
+) -> dict[str, Any]:
     """What an end user sees: no model, token, cost or tool vocabulary."""
     if log.status == "ok":
         status, answer = "answered", log.final_answer
@@ -151,9 +184,11 @@ def answer_payload(log: RunLog, data: services.DataProvider) -> dict[str, Any]:
         "answer": answer,
         "status": status,
         "asked_at": datetime.now(UTC).isoformat(),
-        "steps": [] if failed else services.method_steps(log),
+        "steps": [] if failed else services.method_steps(log, toolbox),
         "sources": [] if failed else services.sources_for_run(log),
-        "charts": [] if failed else [c.model_dump() for c in services.charts_for_run(log, data)],
+        "charts": []
+        if failed
+        else [c.model_dump() for c in services.charts_for_run(log, data, toolbox)],
     }
 
 
