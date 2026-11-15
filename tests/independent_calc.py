@@ -262,3 +262,61 @@ def register_top_district(technology: str, state: str) -> tuple[str, float]:
             by_district[district] += (added_kw - removed_kw) / 1000
     name = max(by_district, key=by_district.get)
     return name, by_district[name]
+
+
+# ---------- price event investigation (0.11.0) ----------
+
+
+def _hour_means(data: list[dict], fn) -> dict[str, float]:
+    """UTC hour 'YYYY-MM-DDTHH' -> mean of fn(row), from the raw rows."""
+    from datetime import UTC, datetime
+
+    sums: dict[str, list[float]] = defaultdict(list)
+    for row in data:
+        hour = datetime.fromisoformat(row["timestamp"]).astimezone(UTC).strftime("%Y-%m-%dT%H")
+        sums[hour].append(fn(row))
+    return {h: sum(v) / len(v) for h, v in sums.items()}
+
+
+def event_evidence(day: str, from_hour: int, to_hour: int) -> dict[str, float]:
+    """Price at the event, on comparable days, and the merit-order estimate (October data)."""
+    from datetime import UTC, date, datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    berlin = ZoneInfo("Europe/Berlin")
+    event_day = date.fromisoformat(day)
+    first = event_day - timedelta(days=28)
+    price = _hour_means(rows("price_DE-LU_2026-10-01_2026-10-31.json"),
+                        lambda r: r["values"]["day_ahead_price"])  # fmt: skip
+    residual = _hour_means(rows("public_power_de_2026-10-01_2026-10-31.json"),
+                           lambda r: r["values"]["residual_load"])  # fmt: skip
+
+    def local(hour: str) -> datetime:
+        return datetime.strptime(hour, "%Y-%m-%dT%H").replace(tzinfo=UTC).astimezone(berlin)
+
+    weekend = event_day.weekday() >= 5
+    event, days, fit = [], defaultdict(list), []
+    for hour in price:
+        t = local(hour)
+        if not first <= t.date() <= event_day:
+            continue
+        if t.date() != event_day:
+            fit.append(hour)
+        if from_hour <= t.hour < to_hour:
+            if t.date() == event_day:
+                event.append(hour)
+            elif (t.date().weekday() >= 5) == weekend:
+                days[t.date()].append(hour)
+    day_means = [sum(price[h] for h in hs) / len(hs) for hs in days.values()]
+    xs = [residual[h] / 1000 for h in fit]
+    ys = [price[h] for h in fit]
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / sum(
+        (x - mx) ** 2 for x in xs
+    )
+    event_x = sum(residual[h] / 1000 for h in event) / len(event)
+    return {
+        "event_price": sum(price[h] for h in event) / len(event),
+        "normal_price": sum(day_means) / len(day_means),
+        "expected_price": my + slope * (event_x - mx),
+    }

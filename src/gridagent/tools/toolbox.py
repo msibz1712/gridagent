@@ -35,6 +35,7 @@ from gridagent.tools.definitions import (
 )
 from gridagent.tools.flexibility import Battery, BatteryRun, plan_load, simulate_battery
 from gridagent.tools.grounding import extract_numbers, is_backed
+from gridagent.tools.investigate import BERLIN, WINDOW_DAYS, combine, hourly, investigate
 from gridagent.tools.register import PlantRegister, query
 from gridagent.tools.stats import Operation, StatsResult, capacity_factor, compute_stats, daily
 
@@ -164,6 +165,12 @@ class RegisterInput(_Input):
     group_by: Literal["none", "state", "district", "municipality", "technology", "year"]
 
 
+class EventInput(_Input):
+    date: date
+    from_hour: int = Field(ge=0, le=23)
+    to_hour: int = Field(ge=1, le=24)
+
+
 class LoadInput(_Input):
     ref: str
     energy_mwh: float = Field(gt=0)
@@ -221,6 +228,7 @@ class ToolBox:
             "simulate_battery": self._simulate_battery,
             "plan_flexible_load": self._plan_flexible_load,
             "get_plant_register": self._get_plant_register,
+            "investigate_price_event": self._investigate_price_event,
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
@@ -497,6 +505,31 @@ class ToolBox:
             "often registered months late, so the latest months are revised upward later.",
         }
 
+    def _investigate_price_event(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Event vs comparable days and the merit order (see tools/investigate.py)."""
+        args = EventInput.model_validate(raw)
+        if args.to_hour <= args.from_hour:
+            raise ToolInputError("to_hour must be after from_hour (it is exclusive).")
+        if args.date >= self.today():
+            raise NoDataError("Events can be investigated for past days only.")
+        start = args.date - timedelta(days=WINDOW_DAYS)
+        prices = self.data.day_ahead_price(start, args.date)
+        generation = self.data.public_power(start, args.date)
+        series = {"price": hourly(prices.get_series("day_ahead_price"))}
+        for key, ids in EVENT_GENERATION.items():
+            parts = [hourly(generation.get_series(i)) for i in ids if i in generation.series_ids()]
+            if len(parts) == len(ids):
+                series[key] = combine(parts)
+        try:  # weather is optional evidence
+            weather = self.data.weather(start, args.date)
+            for key in ("wind_speed", "solar_radiation"):
+                series[key] = hourly(weather.get_series(key))
+        except (NoDataError, EnergyChartsError, KeyError):
+            pass
+        result = investigate(args.date, args.from_hour, args.to_hour, start, series)
+        ref = self._save("investigate_price_event", _event_response(prices, series))
+        return {"ref": ref, **result, "data_source": DATA_SOURCE["price"] + "; DWD weather"}
+
     def _compare_values(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Difference, % difference, ratio and sum of two numbers the tools produced."""
         args = CompareInput.model_validate(raw)
@@ -643,6 +676,39 @@ class ToolBox:
             "data_source": DATA_SOURCE.get(response.endpoint, ENERGY_CHARTS),
             "license": response.license,
         }
+
+
+EVENT_GENERATION = {
+    "residual_load": ["residual_load"],
+    "load": ["load"],
+    "wind": ["wind_onshore", "wind_offshore"],
+    "solar": ["solar"],
+    "fossil_gas": ["fossil_gas"],
+    "lignite": ["fossil_brown_coal_lignite"],
+    "hard_coal": ["fossil_hard_coal"],
+    "net_imports": ["cross_border_electricity_trading"],  # + import (Energy-Charts)
+    "pumped_storage": ["hydro_pumped_storage"],
+}
+
+
+def _event_response(prices: TimeSeriesResponse, series: dict) -> TimeSeriesResponse:
+    """The compared period as hourly rows, for compute_stats and the charts."""
+    keys = ["price", "residual_load", "load", "wind", "solar"]
+    rows = [
+        DataRow(timestamp=hour.astimezone(BERLIN),
+                values={k: round(series[k][hour], 2) if hour in series.get(k, {}) else None
+                        for k in keys})
+        for hour in sorted(series["price"])
+    ]  # fmt: skip
+    units = {"price": "EUR / MWh"}
+    return prices.model_copy(update={
+        "endpoint": "event_window",
+        "unit": "MW",
+        "interval_minutes": 60,
+        "series": [SeriesInfo(id=k, name=k.replace("_", " "), unit=units.get(k, "MW"))
+                   for k in keys],
+        "data": rows,
+    })  # fmt: skip
 
 
 def _battery_response(prices: TimeSeriesResponse, run: BatteryRun) -> TimeSeriesResponse:

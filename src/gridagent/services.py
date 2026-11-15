@@ -329,6 +329,13 @@ def method_step(call: ToolCallLog, where: str = "") -> str:
         text = (f"Optimised a {args.get('power_mw'):g} MW / {args.get('capacity_mwh'):g} MWh "
                 f"battery day by day on these prices ({efficiency:.0%} round-trip efficiency, "
                 "day-ahead market only)")  # fmt: skip
+    elif call.name == "investigate_price_event":
+        args = call.input
+        day = format_period(args.get("date", ""), args.get("date", ""))
+        text = (f"Compared the price on {day}, "
+                f"{args.get('from_hour', 0):02d}:00–{args.get('to_hour', 0):02d}:00, with the same "
+                "hours on comparable days of the 4 weeks before, and estimated the price residual "
+                "load would normally give")  # fmt: skip
     elif call.name == "get_plant_register":
         text = _register_step(call.input)
     elif call.name == "plan_flexible_load":
@@ -416,6 +423,10 @@ def sources_for_run(log: RunLog) -> list[dict[str, str]]:
         sources.append(WEATHER_SOURCE)
     if "get_redispatch" in names:
         sources.append(REDISPATCH_SOURCE)
+    if "investigate_price_event" in names:
+        for extra in (PRICE_SOURCE, GENERATION_SOURCE, WEATHER_SOURCE):
+            if extra not in sources:
+                sources.append(extra)
     if "get_plant_register" in names:
         sources.append(MASTR_SOURCE)
     for call in ok:
@@ -490,6 +501,15 @@ def _chart_title(
             "increase_other": "Redispatch: increases via the exchange and other",
         }
         return titles.get(source, source) + " (MW, measures spread evenly)"
+    if response_endpoint == "event_window":
+        titles = {
+            "price": "Day-ahead price, hourly (event and the 4 weeks before)",
+            "residual_load": "Residual load (demand minus wind and solar), hourly",
+            "load": "Demand, hourly",
+            "wind": "Wind generation, hourly",
+            "solar": "Solar generation, hourly",
+        }
+        return titles.get(source, source)
     if response_endpoint == "battery":
         titles = {
             "battery_power": "Battery: charging (+) and discharging (-), MW",
@@ -527,6 +547,13 @@ def charts_for_run(log: RunLog, data: DataProvider, toolbox: ToolBox | None = No
         if call.name in REF_PREFIX:
             if toolbox is None:
                 replay.execute(call.name, call.input)
+        if call.name == "investigate_price_event":
+            try:
+                ref = json.loads(call.result)["ref"]
+            except (ValueError, KeyError, TypeError):
+                ref = None
+            if ref:
+                wanted += [p for p in [(ref, "price"), (ref, "residual_load")] if p not in wanted]
         if call.name in ("simulate_battery", "plan_flexible_load"):  # simulate also stores a ref
             pairs = [(call.input.get("ref", ""), None)]
             if call.name == "simulate_battery":

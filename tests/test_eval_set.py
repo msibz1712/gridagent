@@ -160,6 +160,9 @@ INDEPENDENT = {
     "battery_last_week": lambda: ic.battery_profit(PRICE_WEEK, power=10, capacity=20),
     "battery_october_default_size": lambda: ic.battery_profit(PRICE_OCT, power=1, capacity=2),
     "flexible_load_yesterday": lambda: ic.cheapest_load(PRICE_YDAY, energy=20, power=5)[0],
+    # ---- Price events (0.11.0): hour means, comparable days and the fit, from raw rows ----
+    "investigate_october_peak": lambda: ic.event_evidence("2026-10-29", 17, 18)["event_price"],
+    "investigate_saturday_midday": lambda: ic.event_evidence("2026-10-31", 12, 15)["event_price"],
     # ---- Plant register (0.10.0): raw rows of the MaStR excerpt ----
     "register_wind_nrw_since_2023": lambda: ic.register_mw(
         "wind_onshore", "Nordrhein-Westfalen", from_year=2023
@@ -184,7 +187,7 @@ def test_eval_set_size_and_coverage() -> None:
     core = [c for c in eval_set.cases if c.min_version is None]
     assert any(c.previous for c in eval_set.cases)  # conversations are covered
     assert 20 <= len(core) <= 30
-    assert len(eval_set.cases) <= 70  # kept small: every live run costs money
+    assert len(eval_set.cases) <= 72  # kept small: every live run costs money
     categories = {c.category for c in eval_set.cases}
     assert {"factual", "tool_use", "ambiguous", "missing_data", "future", "refusal"} <= categories
 
@@ -218,7 +221,23 @@ SECOND_NUMBERS = {
     "register_wind_nrw_since_2023": lambda: ic.register_mw("wind_onshore", "Nordrhein-Westfalen")[
         0
     ],
+    "investigate_october_peak": lambda: ic.event_evidence("2026-10-29", 17, 18)["normal_price"],
+    "investigate_saturday_midday": lambda: ic.event_evidence("2026-10-31", 12, 15)["normal_price"],
 }
+
+
+# Price events: the third expected number is the merit-order estimate.
+EVENT_ESTIMATES = {
+    "investigate_october_peak": ("2026-10-29", 17, 18),
+    "investigate_saturday_midday": ("2026-10-31", 12, 15),
+}
+
+
+@pytest.mark.parametrize("case_id", sorted(EVENT_ESTIMATES))
+def test_merit_order_estimates(case_id: str) -> None:
+    case = next(c for c in eval_set.cases if c.id == case_id)
+    expected = ic.event_evidence(*EVENT_ESTIMATES[case_id])["expected_price"]
+    assert case.numbers[2].values[0] == pytest.approx(expected, abs=0.01)
 
 
 def _official_solar_october() -> float:

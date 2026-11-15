@@ -34,6 +34,7 @@ SPREAD_SERIES = ["germany", "neighbour", "spread"]
 REGISTER_TECHNOLOGIES = [*TECHNOLOGY_GROUPS, *TECHNOLOGIES]
 REGISTER_STATES = STATES
 BATTERY_SERIES = ["battery_power", "stored_energy", "price"]
+EVENT_SERIES = ["residual_load", "load", "wind", "solar"]
 # Neighbouring bidding zones whose prices Energy-Charts publishes under CC BY 4.0
 # (Bundesnetzagentur | SMARD.de). Other zones are "private and internal use only": not offered.
 NEIGHBOUR_ZONES = {
@@ -51,6 +52,7 @@ ALL_SERIES_NAMES = sorted(
     | set(SPREAD_SERIES)
     | set(REDISPATCH_SERIES)
     | set(BATTERY_SERIES)
+    | set(EVENT_SERIES)
 )
 
 DATE = {
@@ -549,6 +551,34 @@ GET_PLANT_REGISTER: dict[str, Any] = {
     "strict": False,
 }  # fmt: skip
 
+INVESTIGATE_PRICE_EVENT: dict[str, Any] = {
+    "name": "investigate_price_event",
+    "description": (
+        "Evidence for why the German day-ahead price was unusually high or low in some hours "
+        "of one past day (local time; to_hour is exclusive, e.g. 17 to 18 = the hour from "
+        "17:00). Compares the event with the same clock hours on comparable days (weekdays "
+        "with weekdays, weekends with weekends) in the 4 weeks before it. Returns: the price "
+        "against those days; a merit-order estimate (price fitted on residual load = demand "
+        "minus wind and solar over the 4 weeks: the price the event's residual load would "
+        "normally give, and the unexplained rest); and drivers (residual load, demand, wind, "
+        "solar, gas, lignite, hard coal, net imports, pumped storage, DWD wind speed and "
+        "solar radiation) with difference and z-score, sorted by how unusual they were; plus "
+        "a `ref` with the hourly price, residual load, demand, wind and solar of the period. "
+        "Fuel and CO2 prices are not in the data. Results are associations, not proof of cause."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "date": DATE,
+            "from_hour": {"type": "integer", "description": "First hour, 0-23 (local time)."},
+            "to_hour": {"type": "integer", "description": "End hour, exclusive, 1-24."},
+        },
+        "required": ["date", "from_hour", "to_hour"],
+        "additionalProperties": False,
+    },
+    "strict": False,  # validated by the ToolBox (see the strict-tool grammar limit)
+}
+
 ALL_TOOLS: dict[str, dict[str, Any]] = {
     t["name"]: t
     for t in (
@@ -568,6 +598,7 @@ ALL_TOOLS: dict[str, dict[str, Any]] = {
         SIMULATE_BATTERY,
         PLAN_FLEXIBLE_LOAD,
         GET_PLANT_REGISTER,
+        INVESTIGATE_PRICE_EVENT,
     )
 }
 
@@ -582,4 +613,5 @@ REF_PREFIX = {
     "get_price_spread": "spread",
     "get_redispatch": "redispatch",
     "simulate_battery": "battery",  # stores its schedule
+    "investigate_price_event": "event",  # stores the hourly period it compared
 }

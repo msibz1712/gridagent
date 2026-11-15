@@ -45,7 +45,12 @@ def stats(box: ToolBox, ref: str, operation: str, source=None, relative_to=None,
 
 
 # Validated by the ToolBox only (see STRICT_TOOLS_VERIFIED_LIVE below for why).
-NOT_STRICT = {"simulate_battery", "plan_flexible_load", "get_plant_register"}
+NOT_STRICT = {
+    "simulate_battery",
+    "plan_flexible_load",
+    "get_plant_register",
+    "investigate_price_event",
+}
 
 
 def test_definitions_are_strict_and_closed() -> None:

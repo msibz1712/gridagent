@@ -868,3 +868,34 @@ cases:
       - {name: get_plant_register, args: {technology: solar_rooftop, area: Köln}}
     oracle_answer: "Solar data is not available in the copy of the plant register I can use (it was downloaded without solar and storage), so I cannot give the rooftop solar capacity in Köln. Source: Marktstammdatenregister (Bundesnetzagentur), dl-de/by-2-0"
 
+  # ---------------- price events (0.11.0): 4 weeks of October before the event ----------------
+  - id: investigate_october_peak
+    category: tool_use
+    min_version: 0.11.0
+    question: Why was the electricity price so high on 29 October 2026 at 17:00?
+    outcome: answer
+    numbers:
+      - {label: event price EUR/MWh, values: [559.63]}
+      - {label: comparable weekdays EUR/MWh, values: [217.8]}
+      - {label: merit-order estimate EUR/MWh, values: [296.48]}
+    dates: ["2026-10-29"]
+    mentions: [["wind"], ["residual load"]]
+    tool_calls:
+      - {name: investigate_price_event, args: {date: "2026-10-29", from_hour: 17, to_hour: 18}}
+    oracle_answer: "On Thursday 29 October 2026, 17:00-18:00, the day-ahead price was 559.63 EUR/MWh, against 217.8 EUR/MWh on average in the same hour on the 20 comparable weekdays from 1 to 28 October (higher than on all of them). It coincided with almost no wind (2,385.58 MW instead of 18,870.4 MW) and no solar, so the residual load was 59.01 GW, among the highest of the four weeks. For that residual load the merit-order estimate gives 296.48 EUR/MWh; the remaining 263.15 EUR/MWh is mostly scarcity pricing at the steep top of the merit order. Gas, lignite, pumped storage and imports ran well above normal to cover the gap. These are associations, not proof of cause. Source: Bundesnetzagentur | SMARD.de via Energy-Charts.info; Deutscher Wetterdienst (DWD)"
+
+  - id: investigate_saturday_midday
+    category: tool_use
+    min_version: 0.11.0
+    question: Why was electricity so expensive on Saturday 31 October 2026 between 12:00 and 15:00?
+    outcome: answer
+    numbers:
+      - {label: event price EUR/MWh, values: [226.74]}
+      - {label: comparable Saturdays and Sundays EUR/MWh, values: [56.07]}
+      - {label: merit-order estimate EUR/MWh, values: [219.39]}
+    dates: ["2026-10-31"]
+    mentions: [["residual load"]]
+    tool_calls:
+      - {name: investigate_price_event, args: {date: "2026-10-31", from_hour: 12, to_hour: 15}}
+    oracle_answer: "On Saturday 31 October 2026, 12:00-15:00, the day-ahead price averaged 226.74 EUR/MWh, against 56.07 EUR/MWh in the same hours on the 7 comparable weekend days from 3 to 30 October. The residual load was far above a normal weekend midday, with little wind, and the merit-order estimate for that residual load is 219.39 EUR/MWh: residual load accounts for almost all of the price, leaving only 7.35 EUR/MWh unexplained. These are associations over four weeks, not proof of cause. Source: Bundesnetzagentur | SMARD.de via Energy-Charts.info; Deutscher Wetterdienst (DWD)"
+
