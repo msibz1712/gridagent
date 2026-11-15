@@ -117,3 +117,25 @@ def test_wind_share_is_plausible(week_power: TimeSeriesResponse) -> None:
         source_series(week_power, "wind"), Operation.SHARE, total=source_series(week_power, "total")
     )
     assert 0 < share.value < 100
+
+
+def test_capture_price_keeps_both_repeated_hours_when_clocks_go_back() -> None:
+    """25 Oct 2026: 02:00-03:00 happens twice. Each hour must keep its own weight."""
+    from datetime import UTC, datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from gridagent.data.models import Point, Series
+
+    berlin = ZoneInfo("Europe/Berlin")
+    first = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)  # 02:00 CEST
+    times = [first.astimezone(berlin), (first + timedelta(hours=1)).astimezone(berlin)]
+    assert times[0] == times[1]  # the trap: equal in local time
+
+    def hourly(series_id: str, unit: str, values: list[float]) -> Series:
+        points = [Point(timestamp=t, value=v) for t, v in zip(times, values, strict=True)]
+        return Series(id=series_id, unit=unit, interval_minutes=60, points=points)
+
+    price = hourly("p", "EUR / MWh", [10.0, 100.0])
+    solar = hourly("g", "MW", [3.0, 1.0])
+    result = compute_stats(price, Operation.CAPTURE_PRICE, weights=solar)
+    assert result.value == (10 * 3 + 100 * 1) / 4  # 32.5; the bug gave (10+100)*1/2 = 55

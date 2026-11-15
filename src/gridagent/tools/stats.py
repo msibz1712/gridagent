@@ -6,7 +6,7 @@ the agent can report incomplete data instead of hiding it.
 """
 
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel
@@ -158,11 +158,13 @@ def _share(series: Series, total: Series | None) -> StatsResult:
 def _capture_price(price: Series, generation: Series | None) -> StatsResult:
     if generation is None:
         raise ValueError("capture_price needs a generation series as weights")
-    weight_at = {p.timestamp: p.value for p in generation.points}
+    # Keyed by UTC: in German time the repeated hour when clocks go back (02:00-03:00
+    # twice) would compare equal and the two hours would overwrite each other.
+    weight_at = {p.timestamp.astimezone(UTC): p.value for p in generation.points}
     pairs = [
-        (p.value, weight_at[p.timestamp])
+        (p.value, weight_at[p.timestamp.astimezone(UTC)])
         for p in price.points
-        if p.value is not None and weight_at.get(p.timestamp) is not None
+        if p.value is not None and weight_at.get(p.timestamp.astimezone(UTC)) is not None
     ]
     weight_sum = sum(w for _, w in pairs)
     value = sum(v * w for v, w in pairs) / weight_sum if weight_sum else None

@@ -11,11 +11,12 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import UTC, date, timedelta
 
 import psycopg
 
 from gridagent.data.client import EnergyChartsError, NoDataError
+from gridagent.data.models import DataRow, TimeSeriesResponse
 from gridagent.data.provider import DataProvider
 from gridagent.data.smard import REGIONS
 from gridagent.db.store import record_sync, upsert_response
@@ -61,8 +62,36 @@ def fetcher(
     if table.name == "cross_border_trading":
         return lambda start, end: provider.cross_border(start, end, kind="trading")
     if table.name == "smard_regional":
-        return lambda start, end: provider.regional(region, list(regional_series), start, end)
+        return lambda start, end: regional_available(provider, region, regional_series, start, end)
     raise ValueError(f"No fetcher for table {table.name}")
+
+
+def regional_available(
+    provider: DataProvider, region: str, series: tuple[str, ...], start: date, end: date
+) -> TimeSeriesResponse:
+    """All requested SMARD series that exist for this control area, merged into one response.
+
+    Not every series exists everywhere (Amprion and TransnetBW have no offshore wind),
+    and one missing series must not stop the others from being synced.
+    """
+    parts = []
+    for source in series:
+        try:
+            parts.append(provider.regional(region, [source], start, end))
+        except NoDataError:
+            continue
+    if not parts:
+        raise NoDataError(f"SMARD has none of {list(series)} for {region} {start}..{end}")
+    rows: dict = {}
+    for part in parts:
+        for row in part.data:
+            key = row.timestamp.astimezone(UTC)  # local times repeat when clocks go back
+            merged = rows.setdefault(key, DataRow(timestamp=row.timestamp, values={}))
+            merged.values.update(row.values)
+    return parts[0].model_copy(update={
+        "series": [info for part in parts for info in part.series],
+        "data": [rows[t] for t in sorted(rows)],
+    })  # fmt: skip
 
 
 def sync_table(

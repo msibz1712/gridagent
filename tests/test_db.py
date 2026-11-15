@@ -278,3 +278,38 @@ def test_dst_day_still_reports_15_minutes(synced_url: str) -> None:
     with connect(synced_url) as conn:
         day = read_response(conn, TABLES["public_power"], date(2026, 10, 25), date(2026, 10, 25))
     assert day.interval_minutes == 15
+
+
+def test_regional_sync_skips_series_a_region_does_not_have() -> None:
+    from gridagent.data.client import NoDataError
+    from gridagent.db.sync import regional_available
+
+    class NoOffshore:
+        def regional(self, region, sources, start, end):
+            if sources == ["wind_offshore"]:
+                raise NoDataError("no such file")
+            return fixtures.regional("TenneT", sources, start, end)
+
+    merged = regional_available(NoOffshore(), "Amprion", ("solar", "wind_offshore", "load"), *WEEK)
+    assert merged.series_ids() == ["solar", "load"] and len(merged.data) == 672
+    assert all(set(row.values) == {"solar", "load"} for row in merged.data)
+
+
+def test_regional_merge_keeps_the_repeated_hour() -> None:
+    from gridagent.db.sync import regional_available
+
+    day = (date(2026, 10, 25), date(2026, 10, 25))  # clocks go back: 25 hours
+    october = fixtures.public_power(*day)
+
+    class OneSeriesPerCall:  # serves each series separately, like SMARD's files
+        def regional(self, region, sources, start, end):
+            keep = set(sources)
+            return october.model_copy(update={
+                "series": [s for s in october.series if s.id in keep],
+                "data": [r.model_copy(update={"values": {k: v for k, v in r.values.items()
+                                                         if k in keep}}) for r in october.data],
+            })  # fmt: skip
+
+    merged = regional_available(OneSeriesPerCall(), "TenneT", ("solar", "load"), *day)
+    assert len(merged.data) == 100  # 25 hours x 4: the repeated hour is kept
+    assert all(set(row.values) == {"solar", "load"} for row in merged.data)
