@@ -20,6 +20,7 @@ Known limitation: text matching is heuristic. Failures are listed per case in
 the report, so a wrong verdict can be spotted and the rule improved.
 """
 
+import calendar
 import re
 from datetime import date
 from typing import Any
@@ -129,6 +130,17 @@ def date_mentioned(text: str, day: date) -> bool:
     return has_month and has_day
 
 
+def whole_month_named(text: str, days: list[date]) -> bool:
+    """'October 2026' covers expected dates that are exactly a month's first and last day."""
+    if len(days) != 2 or (days[0].year, days[0].month) != (days[1].year, days[1].month):
+        return False
+    last_day = calendar.monthrange(days[0].year, days[0].month)[1]
+    if (days[0].day, days[1].day) != (1, last_day):
+        return False
+    month = MONTHS[days[0].month - 1]
+    return re.search(rf"\b{month}\s+{days[0].year}\b", text.lower()) is not None
+
+
 def contains_any(text: str, phrases: tuple[str, ...] | list[str]) -> bool:
     lower = text.lower().replace("’", "'")
     return any(p.lower() in lower for p in phrases)
@@ -205,7 +217,9 @@ def score(case: EvalCase, log: RunLog) -> CheckResults:
         checks.numbers = all(number_present(n, found) for n in case.numbers)
         checks.grounded = all(number_present(n, tool_numbers, strict=True) for n in case.numbers)
     if case.dates or case.mentions:
-        dates_ok = all(date_mentioned(answer, d) for d in case.dates)
+        dates_ok = all(date_mentioned(answer, d) for d in case.dates) or whole_month_named(
+            answer, case.dates
+        )
         mentions_ok = all(contains_any(answer, group) for group in case.mentions)
         checks.dates = dates_ok and mentions_ok
     if log.unsupported_numbers is not None:

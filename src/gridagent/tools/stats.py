@@ -168,6 +168,16 @@ def _capture_price(price: Series, generation: Series | None) -> StatsResult:
     ]
     weight_sum = sum(w for _, w in pairs)
     value = sum(v * w for v, w in pairs) / weight_sum if weight_sum else None
+    # Context analysts always ask for: the plain (time-weighted) average price and the
+    # capture rate (market value / average price, "Wertigkeit"), computed here so the
+    # answer never has to work them out.
+    prices = [p.value for p in price.points if p.value is not None]
+    average = sum(prices) / len(prices) if prices else None
+    detail: dict = {"weighted_by": generation.id}
+    if average is not None:
+        detail["average_price"] = round(average, 2)
+        if value is not None and average > 0:
+            detail["capture_rate_pct"] = round(100 * value / average, 2)
     return StatsResult(
         operation=Operation.CAPTURE_PRICE,
         series_id=f"{price.id}@{generation.id}",
@@ -177,7 +187,7 @@ def _capture_price(price: Series, generation: Series | None) -> StatsResult:
         n_missing=len(price.points) - len(pairs),
         start=price.start,
         end=price.end,
-        detail={"weighted_by": generation.id},
+        detail=detail,
     )
 
 

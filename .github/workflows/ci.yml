@@ -65,6 +65,11 @@ jobs:
             uv run garden eval "energy_qa@${version}" --oracle --min-pass-rate 1.0
           done
 
+      - name: Replay the recorded live run of the current version (real model answers, free)
+        env:
+          GARDEN_REPORTS_DIR: reports
+        run: uv run garden eval energy_qa@0.5.0 --min-pass-rate 1.0
+
       - name: Keep eval reports
         if: always()
         uses: actions/upload-artifact@v4

@@ -174,3 +174,15 @@ def test_grounding_detects_wrong_data_even_if_answer_matches() -> None:
     lucky = make_log(GOOD, GOOD_CALLS, result='{"value": 150.0}')  # tools said 150
     checks = score(PRICE_CASE, lucky)
     assert checks.numbers is True and checks.grounded is False
+
+
+def test_naming_the_whole_month_covers_its_first_and_last_day() -> None:
+    from datetime import date
+
+    from gridagent.evals.scoring import whole_month_named
+
+    october = [date(2026, 10, 1), date(2026, 10, 31)]
+    assert whole_month_named("27.5 hours in October 2026 were above 300 EUR/MWh.", october)
+    assert not whole_month_named("27.5 hours in October were above 300.", october)  # no year
+    assert not whole_month_named("in October 2026", [date(2026, 10, 1), date(2026, 10, 30)])
+    assert whole_month_named("February 2028", [date(2028, 2, 1), date(2028, 2, 29)])  # leap year

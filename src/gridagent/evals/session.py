@@ -67,6 +67,8 @@ def evaluate(
                 recording.cases[case.id] = CaseRecording(
                     question=case.question, responses=llm.responses, latency_s=log.latency_s
                 )
+                # Saved after every case: an interrupted run keeps what it already paid for.
+                save_recording(rec_path, recording)
             return log
 
     elif mode == "replay":

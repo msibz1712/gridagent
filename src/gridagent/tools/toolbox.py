@@ -437,7 +437,7 @@ def _result_dict(result: StatsResult) -> dict[str, Any]:
             out["value_gwh"] = round(result.value / 1000, 2)
         elif result.unit == "GWh":
             out["value_twh"] = round(result.value / 1000, 3)
-        elif result.unit == "EUR / MWh" and result.operation is Operation.CAPTURE_PRICE:
+        elif result.unit == "EUR / MWh":  # every price also in ct/kWh (1 ct/kWh = 10 EUR/MWh)
             out["value_ct_per_kwh"] = round(result.value / 10, 3)
     if result.detail:
         out["detail"] = result.detail
