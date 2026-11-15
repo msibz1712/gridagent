@@ -28,6 +28,7 @@ class Condition:
     series: Series
     below: float | None = None  # value < below
     above: float | None = None  # value > above
+    meaning: str = ""  # plain words for signs that are easy to misread, e.g. price spreads
 
     def __post_init__(self) -> None:
         if self.below is None and self.above is None:
@@ -44,7 +45,8 @@ class Condition:
             parts.append(f"> {self.above:g}")
         if self.below is not None:
             parts.append(f"< {self.below:g}")
-        return f"{self.series.id} {' and '.join(parts)} {self.series.unit}".strip()
+        text = f"{self.series.id} {' and '.join(parts)} {self.series.unit}".strip()
+        return f"{text} ({self.meaning})" if self.meaning else text
 
 
 def hourly_means(series: Series) -> dict[datetime, float]:

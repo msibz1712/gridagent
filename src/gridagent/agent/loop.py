@@ -103,8 +103,11 @@ class Agent:
         if log.status == "ok":
             conversation.turns += 1
             tools.questions.append(question)
+            # Numbers the system itself states (prompt, tool descriptions such as "100-150 m
+            # hub height") are backed too: they are given, not invented.
+            context = [self.agent.system_prompt] + [t["description"] for t in tools.definitions()]
             log.unsupported_numbers = unsupported_numbers(
-                log.final_answer, tools.results, tools.questions
+                log.final_answer, tools.results + context, tools.questions
             )
         else:
             del messages[history_length:]  # roll back the failed turn

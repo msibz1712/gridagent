@@ -60,3 +60,30 @@ def test_a_zone_is_never_answered_with_another_zones_prices() -> None:
 def test_no_recorded_zone_means_no_data() -> None:
     result = toolbox().execute("get_neighbour_price", {"zone": "CH", **WEEK})
     assert result.is_error and "No data" in result.content
+
+
+def test_spread_conditions_and_counts_are_spelled_out() -> None:
+    """A live run flipped the sign (spread < 0 read as 'France cheaper'): the tools now say it."""
+    box = toolbox()
+    spread = json.loads(box.execute("get_price_spread", {"zone": "FR", **WEEK}).content)
+    assert (spread["hours_germany_dearer"], spread["hours_germany_cheaper"],
+            spread["hours_equal_price"]) == (39.5, 87.0, 41.5)  # fmt: skip
+    flows = json.loads(box.execute("get_cross_border_flows", {**WEEK, "kind": "trading"}).content)
+    cheaper = {"ref": spread["ref"], "source": "spread", "below": 0, "above": None}
+    args = {"operation": "hours", "ref": flows["ref"], "source": "france", "conditions": [cheaper]}
+    result = json.loads(box.execute("compute_when", args).content)
+    assert result["conditions"] == ["spread < 0 EUR / MWh (Germany cheaper than FR)"]
+
+
+def test_numbers_from_the_systems_own_instructions_count_as_backed() -> None:
+    from test_loop import AGENTS_DIR
+
+    from gridagent.agent.loop import Agent
+    from gridagent.garden.registry import resolve
+    from gridagent.llm.fake import FakeLLM, text
+
+    agent = resolve(AGENTS_DIR, "energy_qa@0.8.0")
+    answer = "Station wind is not hub-height wind (100–150 m); I use 3 m/s as 'little wind'."
+    runner = Agent(agent, FakeLLM([[text(answer)]]), FixtureDataSource(FIXTURE_DIR),
+                   lambda: date(2026, 11, 14))  # fmt: skip
+    assert runner.run("How windy was it?").unsupported_numbers == []

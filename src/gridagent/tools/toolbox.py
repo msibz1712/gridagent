@@ -336,7 +336,13 @@ class ToolBox:
             "data": rows,
         })  # fmt: skip
         ref = self._save("get_price_spread", response)
+        spreads = [row.values["spread"] for row in rows if row.values["spread"] is not None]
+        per_interval_h = (response.interval_minutes or 60) / 60
         return self._summary(ref, response, args.start, args.end) | {
+            # Counted here so no answer depends on reading the sign correctly.
+            "hours_germany_dearer": sum(s > 0 for s in spreads) * per_interval_h,
+            "hours_germany_cheaper": sum(s < 0 for s in spreads) * per_interval_h,
+            "hours_equal_price": sum(s == 0 for s in spreads) * per_interval_h,
             "zone": response.attributes["zone"],
             "series": ["germany", "neighbour", "spread"],
             "sign_convention": "spread = Germany minus neighbour; positive = Germany dearer",
@@ -372,8 +378,10 @@ class ToolBox:
         for c in args.conditions:
             if c.below is None and c.above is None:
                 raise ToolInputError(f"Condition on {c.ref} needs `below` and/or `above`.")
-            series = self.series_for(self._ref(c.ref), c.source)
-            conditions.append(Condition(series, below=c.below, above=c.above))
+            response = self._ref(c.ref)
+            series = self.series_for(response, c.source)
+            meaning = _spread_meaning(response, c) if c.source == "spread" else ""
+            conditions.append(Condition(series, below=c.below, above=c.above, meaning=meaning))
         target = None
         if args.operation != "hours":
             if args.ref is None:
@@ -539,6 +547,16 @@ def _check_source(source: str) -> None:
         raise ToolInputError(
             f"Unknown source '{source}'. Choose from: {', '.join(available_sources())}."
         )
+
+
+def _spread_meaning(response: TimeSeriesResponse, condition: "ConditionInput") -> str:
+    """Spread conditions in words: the sign of 'Germany minus neighbour' is easy to misread."""
+    zone = response.attributes.get("zone", "the neighbour").split(" ")[0]
+    if condition.above is not None and condition.above >= 0 and condition.below is None:
+        return f"Germany dearer than {zone}"
+    if condition.below is not None and condition.below <= 0 and condition.above is None:
+        return f"Germany cheaper than {zone}"
+    return f"spread = Germany minus {zone}"
 
 
 def _round(value: float) -> float:

@@ -60,6 +60,7 @@ NO_DATA_PHRASES = (
     "hasn't happened",
     "not yet",
     "only available up to",
+    "up to yesterday",
 )
 SOURCE_PHRASES = (
     "energy-charts", "smard", "fraunhofer", "umweltbundesamt", "uba", "bdew",
