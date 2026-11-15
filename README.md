@@ -252,7 +252,11 @@ unit files, parsing each as a stream. It keeps an aggregate (municipality × tec
 year: capacity added, permanently decommissioned, planned, community-owned wind), about
 1/100 of the size, with codes translated through the register's own catalogue.
 
-National totals agree with Energy-Charts within 0.1–0.7 % (wind, coal, biomass). Two
+National totals agree with Energy-Charts within 0.1–0.7 % for wind, coal and biomass.
+Solar is 2.7 % below Energy-Charts' AC figure (117.7 vs 121.0 GW: the register's net rated
+power is a different definition), batteries 5 % below, and pumped storage much lower (6.2
+vs 9.9 GW), probably because Energy-Charts also counts plants abroad that feed the German
+grid; the register lists units in Germany only. Two
 things to know when using it: large plants on the high-voltage grid are published with
 their district but not their municipality, and units are often registered months late,
 so the latest months are revised upward. `garden mastr export` writes a balanced
