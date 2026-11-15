@@ -113,8 +113,10 @@ uv run garden db status                   # rows, MB, covered date ranges
 
 - One wide table per endpoint (`public_power`, `total_power`, `day_ahead_price`,
   `cross_border_physical`, `cross_border_trading`, `smard_regional`), 15-minute rows,
-  values as `real` and rounded to 3 decimals when read, so they come back exactly as the
-  API delivered them (tested value for value).
+  values as fixed-point integers (value x 1000), so they come back exactly as the API
+  delivered them (tested value for value); 2018 to today is about 190 MB.
+- Reads are packed per day (raw 4-byte numbers instead of one field per value), which
+  halves the download, and kept in a disk cache keyed by the latest sync of the period.
 - `energy.sync_log` records which days were loaded; a request is served from the
   database only if its whole period is covered. Only complete days are synced.
 - The app answers with the read-only role; the owner URL is only for `db` commands and is

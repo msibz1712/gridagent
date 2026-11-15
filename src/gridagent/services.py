@@ -65,7 +65,7 @@ def build_data(
         return live
     from gridagent.db.source import DatabaseDataSource, HybridDataSource  # optional `db` extra
 
-    return HybridDataSource(DatabaseDataSource(database_url), live)
+    return HybridDataSource(DatabaseDataSource(database_url, cache_dir / "database"), live)
 
 
 def ask(

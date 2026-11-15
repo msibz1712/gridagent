@@ -313,3 +313,36 @@ def test_regional_merge_keeps_the_repeated_hour() -> None:
     merged = regional_available(OneSeriesPerCall(), "TenneT", ("solar", "load"), *day)
     assert len(merged.data) == 100  # 25 hours x 4: the repeated hour is kept
     assert all(set(row.values) == {"solar", "load"} for row in merged.data)
+
+
+def test_large_and_negative_values_with_3_decimals_are_exact(synced_url: str) -> None:
+    """A 4-byte float would turn 65432.123 into 65432.125; fixed-point keeps it."""
+    from datetime import datetime, timedelta
+
+    from gridagent.db.store import BERLIN, upsert_response
+
+    values = [65432.123, -499.999, 0.001, -0.5, 79999.999, None]
+    start = datetime(2030, 1, 1, tzinfo=BERLIN)
+    response = _price_response([start + timedelta(minutes=15 * i) for i in range(6)])
+    for row, value in zip(response.data, values, strict=True):
+        row.values["day_ahead_price"] = value
+    with connect(synced_url) as conn:
+        upsert_response(conn, TABLES["day_ahead_price"], response)
+        stored = read_response(conn, TABLES["day_ahead_price"], date(2030, 1, 1), date(2030, 1, 1))
+        conn.rollback()  # leave nothing behind
+    assert [row.values["day_ahead_price"] for row in stored.data] == values
+
+
+def test_disk_cache_serves_repeats_and_refreshes_after_a_resync(synced_url: str, tmp_path) -> None:
+    db = DatabaseDataSource(synced_url, cache_dir=tmp_path)
+    first = db.public_power(*WEEK)
+    assert len(list(tmp_path.glob("*.json"))) == 1
+    assert db.public_power(*WEEK) == first  # second read: from disk, identical
+
+    with connect(synced_url) as conn:  # re-syncing the week must make the copy stale
+        run_sync(conn, fixtures, *WEEK, tables=["public_power"])
+    db.public_power(*WEEK)
+    assert len(list(tmp_path.glob("*.json"))) == 2
+
+    with pytest.raises(NotInDatabase):  # coverage is still checked before the cache
+        db.public_power(date(2026, 11, 9), date(2026, 11, 10))

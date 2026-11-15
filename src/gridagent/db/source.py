@@ -9,15 +9,21 @@ is used too, so the agent keeps working.
 
 A new connection is opened per request: simple and robust behind Supabase's
 pooler, and cheap compared with a model call.
+
+With a cache directory, every read is also kept on disk, keyed by the request and
+the latest sync of that period: asking about the same period again skips the
+download (the slow part), and re-syncing the period makes the cached copy stale.
 """
 
 from datetime import date
+from pathlib import Path
 
 import psycopg
 
+from gridagent.data.cache import ResponseCache
 from gridagent.data.models import TimeSeriesResponse
 from gridagent.data.provider import DataProvider
-from gridagent.db.store import connect, is_covered, read_response
+from gridagent.db.store import connect, is_covered, last_sync_id, read_response
 from gridagent.db.tables import TABLES
 
 
@@ -26,8 +32,9 @@ class NotInDatabase(Exception):
 
 
 class DatabaseDataSource:
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, cache_dir: Path | None = None) -> None:
         self.url = url
+        self.cache = ResponseCache(cache_dir) if cache_dir is not None else None
 
     def _read(
         self, table_name: str, start: date, end: date, region: str = ""
@@ -38,7 +45,18 @@ class DatabaseDataSource:
         with connect(self.url) as conn:
             if not is_covered(conn, table, start, end, region):
                 raise NotInDatabase(f"{table_name} {region} {start}..{end}")
+            key = None
+            if self.cache is not None:
+                sync_id = last_sync_id(conn, table, start, end, region)
+                key = ResponseCache.make_key(f"db/{table_name}", {
+                    "start": start.isoformat(), "end": end.isoformat(),
+                    "region": region, "sync": str(sync_id)})  # fmt: skip
+                cached = self.cache.get(key, max_age=None)
+                if cached is not None:
+                    return TimeSeriesResponse.model_validate(cached)
             response = read_response(conn, table, start, end, region)
+        if key is not None and response.data:
+            self.cache.set(key, response.model_dump(mode="json"), f"db {table_name} {start}..{end}")
         if not response.data:
             # Synced, but the source has nothing there (e.g. DE-LU prices before Oct 2018):
             # let the live API answer, which reports "no data" the usual way.

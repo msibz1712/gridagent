@@ -10,6 +10,8 @@ least one value in the period are included, so "series absent in this period"
 (e.g. nuclear after April 2023) stays distinguishable from "value missing".
 """
 
+import sys
+from array import array
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -18,10 +20,10 @@ import psycopg
 from psycopg import sql
 
 from gridagent.data.models import DataRow, SeriesInfo, TimeSeriesResponse
-from gridagent.db.tables import PERCENT_SERIES, SCHEMA, TABLES, TableSpec, schema_sql
+from gridagent.db.tables import PERCENT_SERIES, SCALE, SCHEMA, TABLES, TableSpec, schema_sql
 
 BERLIN = ZoneInfo("Europe/Berlin")
-READ_DECIMALS = 3  # values are stored as 4-byte floats; see tables.py
+NULL_MARKER = -(2**31)  # smallest integer: stands for NULL in packed reads only
 
 
 def connect(url: str, autocommit: bool = False) -> psycopg.Connection:
@@ -46,6 +48,11 @@ def day_bounds(start: date, end: date) -> tuple[datetime, datetime]:
 # ---------- writing ----------
 
 
+def to_stored(value: float | None) -> int | None:
+    """API value -> fixed-point integer (see tables.py). Values out of range fail loudly."""
+    return None if value is None else round(value * SCALE)
+
+
 def upsert_response(
     conn: psycopg.Connection, table: TableSpec, response: TimeSeriesResponse, region: str = ""
 ) -> tuple[int, list[str]]:
@@ -66,7 +73,7 @@ def upsert_response(
         with cur.copy(copy_sql) as copy:
             for row in response.data:
                 keys = [region, row.timestamp] if table.regional else [row.timestamp]
-                copy.write_row([*keys, *(row.values.get(c) for c in columns)])
+                copy.write_row([*keys, *(to_stored(row.values.get(c)) for c in columns)])
         updates = sql.SQL(", ").join(
             sql.SQL("{0} = excluded.{0}").format(sql.Identifier(c)) for c in columns
         )
@@ -113,6 +120,21 @@ def covered_ranges(conn: psycopg.Connection, table: TableSpec, region: str = "")
     return [tuple(r) for r in merged]
 
 
+def last_sync_id(
+    conn: psycopg.Connection, table: TableSpec, start: date, end: date, region: str = ""
+) -> int | None:
+    """Id of the latest sync that touched [start, end]: changes exactly when its data may have.
+
+    Used as part of the disk-cache key, so re-syncing a period refreshes cached reads of
+    it, while the nightly sync of the last days leaves older cached periods valid.
+    """
+    return conn.execute(
+        f"select max(id) from {SCHEMA}.sync_log where table_name = %s and region = %s "
+        "and date_from <= %s and date_until >= %s",
+        (table.name, region, end, start),
+    ).fetchone()[0]
+
+
 def is_covered(
     conn: psycopg.Connection, table: TableSpec, start: date, end: date, region: str = ""
 ) -> bool:
@@ -137,20 +159,61 @@ def interval_minutes(timestamps: list[datetime]) -> int | None:
     return int(steps.pop().total_seconds() // 60)
 
 
-def read_response(
+def _unpack(blob: bytes, typecode: str) -> array:
+    """Big-endian bytes from PostgreSQL's int4send/int8send -> numbers."""
+    values = array(typecode)
+    values.frombytes(blob)
+    if sys.byteorder == "little":
+        values.byteswap()
+    return values
+
+
+def _fetch_rows(
     conn: psycopg.Connection, table: TableSpec, start: date, end: date, region: str = ""
-) -> TimeSeriesResponse:
+) -> list[tuple]:
+    """Rows (ts, value per series...) for the period, ordered by time.
+
+    The download, not the database, is the slow part (about 2 MB/s to Supabase), so
+    the values are sent compactly: per day and series, all stored integers packed
+    into one block of raw 4-byte numbers. Row by row, every value would carry a
+    4-byte length header as well, which doubles the transfer (measured: 8 years
+    36 s -> 16 s). NULL travels as NULL_MARKER and becomes None again.
+    """
     lower, upper = day_bounds(start, end)
     target = sql.SQL("{}.{}").format(sql.Identifier(SCHEMA), sql.Identifier(table.name))
-    columns = sql.SQL(", ").join(map(sql.Identifier, table.series))
+    packed = sql.SQL(", ").join(
+        sql.SQL("string_agg(int4send(coalesce({}, (%s)::integer)), '' order by ts)").format(
+            sql.Identifier(column)
+        )
+        for column in table.series
+    )
     where = sql.SQL("ts >= %s and ts < %s") + (
         sql.SQL(" and region = %s") if table.regional else sql.SQL("")
     )
-    params: list[Any] = [lower, upper] + ([region] if table.regional else [])
-    rows = conn.execute(
-        sql.SQL("select ts, {} from {} where {} order by ts").format(columns, target, where), params
-    ).fetchall()
+    params: list[Any] = [NULL_MARKER] * len(table.series) + [lower, upper]
+    params += [region] if table.regional else []
+    query = sql.SQL(
+        "select string_agg(int8send(extract(epoch from ts)::int8), '' order by ts), {} "
+        "from {} where {} group by (ts at time zone 'Europe/Berlin')::date order by min(ts)"
+    ).format(packed, target, where)
 
+    rows: list[tuple] = []
+    for day in conn.execute(query, params, binary=True).fetchall():
+        seconds = _unpack(day[0], "q")
+        columns = [
+            [None if v == NULL_MARKER else v / SCALE for v in _unpack(blob, "i")]
+            for blob in day[1:]
+        ]
+        for i, second in enumerate(seconds):
+            timestamp = datetime.fromtimestamp(second, UTC)
+            rows.append((timestamp, *(column[i] for column in columns)))
+    return rows
+
+
+def read_response(
+    conn: psycopg.Connection, table: TableSpec, start: date, end: date, region: str = ""
+) -> TimeSeriesResponse:
+    rows = _fetch_rows(conn, table, start, end, region)
     present = [c for i, c in enumerate(table.series) if any(r[i + 1] is not None for r in rows)]
     data = []
     for row in rows:
@@ -158,8 +221,7 @@ def read_response(
         data.append(
             DataRow(
                 timestamp=row[0].astimezone(BERLIN),
-                values={c: None if values[c] is None else round(values[c], READ_DECIMALS)
-                        for c in present},
+                values={c: values[c] for c in present},
             )
         )  # fmt: skip
     attributes = dict(table.attributes)

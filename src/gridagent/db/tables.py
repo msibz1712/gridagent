@@ -4,9 +4,12 @@ Design choices (and why):
 - One table per data endpoint, in WIDE format (one column per series). With
   15-minute data this is far smaller than one row per (time, series, value):
   roughly 4 MB per table per year, so a decade fits Supabase's free 500 MB.
-- Values are stored as `real` (4-byte float, ~7 significant digits). Energy-Charts
-  values have at most 3 decimals and fewer than 7 significant digits, so they are
-  rounded back to 3 decimals when read and come out exactly as delivered.
+- Values are stored as fixed-point integers: value x 1000 in a 4-byte `integer`
+  (46612.1 MW -> 46612100). That is exact for the 3 decimals the APIs deliver, as
+  small as a 4-byte float, and covers +-2.1 million (load peaks near 80,000 MW).
+  A 4-byte float would not be exact: at 46,000 it can only resolve ~0.004.
+- NULL ("no value") is a real database NULL; only on the way out (see store.py) it
+  travels as the smallest integer, which no real value can be.
 - Everything lives in its own schema `energy`, which Supabase does not expose
   through its web API (only `public` is exposed by default).
 - `energy.sync_log` records which date ranges were loaded. A period is only served
@@ -19,6 +22,7 @@ from gridagent.data.smard import FILTERS as SMARD_SERIES
 from gridagent.tools.definitions import NEIGHBOURS
 
 SCHEMA = "energy"
+SCALE = 1000  # stored integer = round(value * SCALE): 3 decimals, exact
 
 GENERATION_COLUMNS = (
     "hydro_pumped_storage_consumption", "cross_border_electricity_trading", "hydro_run_of_river",
@@ -114,7 +118,7 @@ def schema_sql() -> str:
     for table in TABLES.values():
         key_columns = ["region text not null", "ts timestamptz not null"] if table.regional else [
             "ts timestamptz not null"]  # fmt: skip
-        value_columns = [f'"{column}" real' for column in table.series]  # quoted: e.g. "sum"
+        value_columns = [f'"{column}" integer' for column in table.series]  # quoted: "sum"
         columns = ",\n  ".join([*key_columns, *value_columns])
         statements.append(
             f"create table if not exists {table.qualified} (\n  {columns},\n"
@@ -122,7 +126,7 @@ def schema_sql() -> str:
         )
         for column in table.series:  # new series added later -> new nullable column
             statements.append(
-                f'alter table {table.qualified} add column if not exists "{column}" real;'
+                f'alter table {table.qualified} add column if not exists "{column}" integer;'
             )
     statements.append(f"""create table if not exists {SCHEMA}.sync_log (
   id bigint generated always as identity primary key,
