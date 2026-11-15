@@ -10,7 +10,7 @@ least one value in the period are included, so "series absent in this period"
 (e.g. nuclear after April 2023) stays distinguishable from "value missing".
 """
 
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -122,6 +122,21 @@ def is_covered(
 # ---------- reading ----------
 
 
+def interval_minutes(timestamps: list[datetime]) -> int | None:
+    """The fixed step between rows, like the API reports it; None if the step varies.
+
+    Prices, for example, were hourly until 30 Sep 2025 and are quarter-hourly since,
+    so a period spanning the switch has no single interval (the API then says null too).
+    Compared in UTC: Python subtracts two datetimes of the *same* time zone by wall
+    clock, which would make the DST switch (01:00 -> 03:00) look like a 2-hour step.
+    """
+    utc = [t.astimezone(UTC) for t in timestamps]
+    steps = {b - a for a, b in zip(utc, utc[1:], strict=False)}
+    if len(steps) != 1:
+        return None
+    return int(steps.pop().total_seconds() // 60)
+
+
 def read_response(
     conn: psycopg.Connection, table: TableSpec, start: date, end: date, region: str = ""
 ) -> TimeSeriesResponse:
@@ -154,7 +169,7 @@ def read_response(
         endpoint=table.endpoint,
         timezone="Europe/Berlin",
         unit=table.unit,
-        interval_minutes=15,
+        interval_minutes=interval_minutes([row.timestamp for row in data]),
         license=table.license,
         country="de",
         bidding_zone="DE-LU" if table.endpoint == "price" else None,

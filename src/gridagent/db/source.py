@@ -38,7 +38,12 @@ class DatabaseDataSource:
         with connect(self.url) as conn:
             if not is_covered(conn, table, start, end, region):
                 raise NotInDatabase(f"{table_name} {region} {start}..{end}")
-            return read_response(conn, table, start, end, region)
+            response = read_response(conn, table, start, end, region)
+        if not response.data:
+            # Synced, but the source has nothing there (e.g. DE-LU prices before Oct 2018):
+            # let the live API answer, which reports "no data" the usual way.
+            raise NotInDatabase(f"{table_name} {region} {start}..{end}: no rows")
+        return response
 
     def public_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse:
         return self._read("public_power", start, end)

@@ -220,3 +220,61 @@ def test_reader_url_keeps_supabase_project_ref() -> None:
     assert reader_url(owner, "p/w") == (
         "postgresql://gridagent_reader.abcref:p%2Fw@pooler.example.com:5432/postgres"
     )
+
+
+def _price_response(timestamps):
+    from gridagent.data.models import DataRow, SeriesInfo, TimeSeriesResponse
+
+    return TimeSeriesResponse(
+        endpoint="price", timezone="Europe/Berlin", unit="EUR / MWh",
+        series=[SeriesInfo(id="day_ahead_price", name="price")],
+        data=[DataRow(timestamp=t, values={"day_ahead_price": -1.0}) for t in timestamps],
+    )  # fmt: skip
+
+
+def test_hourly_prices_keep_their_interval(synced_url: str) -> None:
+    """Prices were hourly until Sep 2025: counting negative-price hours must not be 4x off."""
+    from datetime import UTC, datetime, timedelta
+
+    from gridagent.db.store import BERLIN, record_sync, upsert_response
+    from gridagent.tools.stats import Operation, compute_stats
+
+    # 26 Mar 2023 is the spring DST day: 23 hours, still a fixed 60-minute step.
+    # Step in UTC (absolute time), then show in German time.
+    midnight = datetime(2023, 3, 26, tzinfo=BERLIN).astimezone(UTC)
+    hourly = [(midnight + timedelta(hours=h)).astimezone(BERLIN) for h in range(23)]
+    with connect(synced_url) as conn:
+        upsert_response(conn, TABLES["day_ahead_price"], _price_response(hourly))
+        record_sync(conn, TABLES["day_ahead_price"], date(2023, 3, 26), date(2023, 3, 26), 23)
+        conn.commit()
+    response = DatabaseDataSource(synced_url).day_ahead_price(date(2023, 3, 26), date(2023, 3, 26))
+    assert response.interval_minutes == 60
+    series = response.get_series("day_ahead_price")
+    assert compute_stats(series, Operation.COUNT_BELOW, threshold=0).value == 23  # hours
+
+
+def test_interval_is_none_when_the_step_changes() -> None:
+    from datetime import datetime, timedelta
+
+    from gridagent.db.store import BERLIN, interval_minutes
+
+    t0 = datetime(2025, 9, 30, 22, tzinfo=BERLIN)
+    mixed = [t0, t0 + timedelta(hours=1), t0 + timedelta(hours=1, minutes=15)]
+    assert interval_minutes(mixed) is None
+    assert interval_minutes(mixed[1:]) == 15
+
+
+def test_synced_period_without_rows_falls_back_to_live(synced_url: str) -> None:
+    from gridagent.db.store import record_sync
+
+    with connect(synced_url) as conn:  # e.g. DE-LU prices before the zone existed
+        record_sync(conn, TABLES["day_ahead_price"], date(2018, 1, 1), date(2018, 9, 30), 0)
+        conn.commit()
+    with pytest.raises(NotInDatabase):
+        DatabaseDataSource(synced_url).day_ahead_price(date(2018, 2, 1), date(2018, 2, 7))
+
+
+def test_dst_day_still_reports_15_minutes(synced_url: str) -> None:
+    with connect(synced_url) as conn:
+        day = read_response(conn, TABLES["public_power"], date(2026, 10, 25), date(2026, 10, 25))
+    assert day.interval_minutes == 15
