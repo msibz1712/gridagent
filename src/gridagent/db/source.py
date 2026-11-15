@@ -80,6 +80,9 @@ class DatabaseDataSource:
     def installed_power(self, time_step: str = "yearly") -> TimeSeriesResponse:
         raise NotInDatabase("installed capacity is small and always fetched live")
 
+    def weather(self, start: date, end: date) -> TimeSeriesResponse:
+        return self._read("weather", start, end)
+
     def regional(
         self, region: str, sources: list[str], start: date, end: date
     ) -> TimeSeriesResponse:
@@ -126,6 +129,9 @@ class HybridDataSource:
 
     def installed_power(self, time_step: str = "yearly") -> TimeSeriesResponse:
         return self.live.installed_power(time_step)
+
+    def weather(self, start: date, end: date) -> TimeSeriesResponse:
+        return self._either("weather", start, end)
 
     def regional(
         self, region: str, sources: list[str], start: date, end: date

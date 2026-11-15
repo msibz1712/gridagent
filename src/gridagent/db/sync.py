@@ -24,6 +24,7 @@ from gridagent.db.tables import TABLES, TableSpec
 
 DEFAULT_REGIONAL_SERIES = ("solar", "wind_onshore", "wind_offshore", "load")
 RESYNC_DAYS = 7  # recent data is preliminary; refresh it on every run
+WEATHER_SINCE = date(2020, 1, 1)  # default first day of weather in a full sync
 
 
 @dataclass
@@ -61,6 +62,8 @@ def fetcher(
         return lambda start, end: provider.cross_border(start, end, kind="physical")
     if table.name == "cross_border_trading":
         return lambda start, end: provider.cross_border(start, end, kind="trading")
+    if table.name == "weather":
+        return provider.weather
     if table.name == "smard_regional":
         return lambda start, end: regional_available(provider, region, regional_series, start, end)
     raise ValueError(f"No fetcher for table {table.name}")
@@ -145,6 +148,12 @@ def run_sync(
                 sync_table(
                     conn, provider, table, start, until, region, report, progress, regional_series
                 )
+        elif table.name == "weather":
+            # DWD's historical files come in decade blocks; from 2020 one block per station
+            # suffices (see dwd.py). Earlier weather can be synced with an explicit table run.
+            start = since if tables else max(since, WEATHER_SINCE)
+            if start <= until:
+                sync_table(conn, provider, table, start, until, "", report, progress)
         else:
             sync_table(conn, provider, table, since, until, "", report, progress)
     return report

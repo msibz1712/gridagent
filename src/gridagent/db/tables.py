@@ -45,6 +45,7 @@ class TableSpec:
     license: str
     regional: bool = False  # True: primary key (region, ts) instead of (ts)
     attributes: tuple[tuple[str, str], ...] = ()
+    series_units: tuple[tuple[str, str], ...] = ()  # when series differ in unit
 
     @property
     def qualified(self) -> str:
@@ -97,6 +98,23 @@ TABLES: dict[str, TableSpec] = {
             unit="GW",
             license=ENERGY_CHARTS_LICENSE,
             attributes=SIGN_CONVENTION,
+        ),
+        TableSpec(
+            name="weather",
+            endpoint="weather",
+            series=("wind_speed", "solar_radiation"),
+            unit="",
+            license="CC BY 4.0, Deutscher Wetterdienst (DWD), opendata.dwd.de",
+            attributes=(
+                ("source", "Deutscher Wetterdienst (DWD), 10-minute station observations"),
+                ("stations", "plain mean over a fixed set of 65 DWD stations"),
+                (
+                    "caveat",
+                    "station wind is measured ~10 m above ground, not at hub height: "
+                    "an indicator of how windy it was, not of what turbines received",
+                ),
+            ),  # fmt: skip
+            series_units=(("wind_speed", "m/s"), ("solar_radiation", "W/m²")),
         ),
         TableSpec(
             name="smard_regional",

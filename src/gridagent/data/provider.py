@@ -1,7 +1,7 @@
 """The data interface the agent's tools use, and the live implementation.
 
 Two implementations share this interface:
-- `LiveDataSource`: Energy-Charts API + SMARD (real network, cached)
+- `LiveDataSource`: Energy-Charts API + SMARD + DWD weather (real network, cached)
 - `FixtureDataSource` (fixture_source.py): recorded responses for offline tests/evals
 """
 
@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Protocol
 
 from gridagent.data.cache import ResponseCache
-from gridagent.data.client import EnergyChartsClient
+from gridagent.data.client import EnergyChartsClient, NoDataError, berlin_today
+from gridagent.data.dwd import DwdClient, fetch_weather
 from gridagent.data.models import TimeSeriesResponse
 from gridagent.data.smard import SMARD_BASE_URL, SmardClient
 
@@ -34,6 +35,8 @@ class DataProvider(Protocol):
         self, region: str, sources: list[str], start: date, end: date
     ) -> TimeSeriesResponse: ...
 
+    def weather(self, start: date, end: date) -> TimeSeriesResponse: ...
+
 
 class LiveDataSource:
     """Energy-Charts for national data, SMARD for control areas. Both cached on disk."""
@@ -46,6 +49,7 @@ class LiveDataSource:
             cache=ResponseCache(cache_dir / "smard"), base_url=SMARD_BASE_URL
         )
         self.smard = SmardClient(get_json=lambda path, end: smard_http.get_json(path, {}, end))
+        self.dwd = DwdClient(cache_dir / "dwd")
 
     def public_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse:
         return self.energy_charts.public_power(start, end, country)
@@ -66,3 +70,9 @@ class LiveDataSource:
         self, region: str, sources: list[str], start: date, end: date
     ) -> TimeSeriesResponse:
         return self.smard.regional(region, sources, start, end)
+
+    def weather(self, start: date, end: date) -> TimeSeriesResponse:
+        """DWD publishes observations up to yesterday; a period including today is refused."""
+        if end >= berlin_today():
+            raise NoDataError("DWD weather observations are published up to yesterday.")
+        return fetch_weather(self.dwd, start, end)

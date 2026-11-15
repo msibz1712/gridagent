@@ -54,6 +54,9 @@ class FixtureDataSource:
                 return response
         raise NoDataError(f"No recorded installed_power data for time_step={time_step}.")
 
+    def weather(self, start: date, end: date) -> TimeSeriesResponse:
+        return self._find("weather", start, end)
+
     # ---------- SMARD ----------
 
     def regional(

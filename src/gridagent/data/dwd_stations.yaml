@@ -1,0 +1,70 @@
+# DWD stations averaged for GridAgent's weather indicators (fixed set, so averages stay
+# comparable over time). Rule: every station in DWD's 10-minute wind AND solar networks
+# with data from 2018-01-01 that was still reporting on 2026-11-14 (selected 2026-11-15
+# from the station lists in 10_minutes/{wind,solar}/recent/). Source: DWD, CC BY 4.0.
+stations:
+  - {id: "00183", name: "Arkona", state: "Mecklenburg-Vorpommern", lat: 54.6791, lon: 13.4344}
+  - {id: "00232", name: "Augsburg", state: "Bayern", lat: 48.4253, lon: 10.9417}
+  - {id: "00460", name: "Berus", state: "Saarland", lat: 49.2641, lon: 6.6868}
+  - {id: "00596", name: "Boltenhagen", state: "Mecklenburg-Vorpommern", lat: 54.0027, lon: 11.1908}
+  - {id: "00662", name: "Braunschweig", state: "Niedersachsen", lat: 52.2915, lon: 10.4464}
+  - {id: "00691", name: "Bremen", state: "Bremen", lat: 53.0451, lon: 8.7981}
+  - {id: "00701", name: "Bremerhaven", state: "Bremen", lat: 53.5332, lon: 8.5761}
+  - {id: "00853", name: "Chemnitz", state: "Sachsen", lat: 50.7913, lon: 12.872}
+  - {id: "00856", name: "Chieming", state: "Bayern", lat: 47.8843, lon: 12.5404}
+  - {id: "00867", name: "Lautertal-Oberlauter", state: "Bayern", lat: 50.3066, lon: 10.9679}
+  - {id: "00953", name: "Deuselbach", state: "Rheinland-Pfalz", lat: 49.7619, lon: 7.0542}
+  - {id: "00963", name: "Diepholz", state: "Niedersachsen", lat: 52.5881, lon: 8.3424}
+  - {id: "01048", name: "Dresden-Klotzsche", state: "Sachsen", lat: 51.1278, lon: 13.7543}
+  - {id: "01303", name: "Essen-Bredeney", state: "Nordrhein-Westfalen", lat: 51.4041, lon: 6.9677}
+  - {id: "01346", name: "Feldberg/Schwarzwald", state: "Baden-Württemberg", lat: 47.8748, lon: 8.0038}
+  - {id: "01358", name: "Fichtelberg", state: "Sachsen", lat: 50.4285, lon: 12.9534}
+  - {id: "01420", name: "Frankfurt/Main", state: "Hessen", lat: 50.0259, lon: 8.5213}
+  - {id: "01443", name: "Freiburg", state: "Baden-Württemberg", lat: 48.0232, lon: 7.8343}
+  - {id: "01639", name: "Gießen/Wettenberg", state: "Hessen", lat: 50.6017, lon: 8.6439}
+  - {id: "01684", name: "Görlitz", state: "Sachsen", lat: 51.1621, lon: 14.9506}
+  - {id: "01832", name: "Großer Arber", state: "Bayern", lat: 49.1129, lon: 13.1338}
+  - {id: "01975", name: "Hamburg-Fuhlsbüttel", state: "Hamburg", lat: 53.6332, lon: 9.9881}
+  - {id: "02115", name: "Helgoland", state: "Schleswig-Holstein", lat: 54.175, lon: 7.892}
+  - {id: "02290", name: "Hohenpeißenberg", state: "Bayern", lat: 47.8009, lon: 11.0108}
+  - {id: "02483", name: "Kahler Asten", state: "Nordrhein-Westfalen", lat: 51.1803, lon: 8.4891}
+  - {id: "02601", name: "Kleiner Feldberg/Taunus", state: "Hessen", lat: 50.2218, lon: 8.4469}
+  - {id: "02638", name: "Klippeneck", state: "Baden-Württemberg", lat: 48.1054, lon: 8.7548}
+  - {id: "02667", name: "Köln/Bonn", state: "Nordrhein-Westfalen", lat: 50.8645, lon: 7.1575}
+  - {id: "02738", name: "Kreuth", state: "Bayern", lat: 47.6448, lon: 11.7438}
+  - {id: "02925", name: "Leinefelde", state: "Thüringen", lat: 51.3932, lon: 10.3123}
+  - {id: "02932", name: "Leipzig/Halle", state: "Sachsen", lat: 51.4347, lon: 12.2396}
+  - {id: "03015", name: "Lindenberg", state: "Brandenburg", lat: 52.2085, lon: 14.118}
+  - {id: "03098", name: "Lüdenscheid", state: "Nordrhein-Westfalen", lat: 51.2452, lon: 7.6425}
+  - {id: "03287", name: "Michelstadt-Vielbrunn", state: "Hessen", lat: 49.7177, lon: 9.0997}
+  - {id: "03366", name: "Mühldorf", state: "Bayern", lat: 48.279, lon: 12.5024}
+  - {id: "03379", name: "München-Stadt", state: "Bayern", lat: 48.1632, lon: 11.5429}
+  - {id: "03631", name: "Norderney", state: "Niedersachsen", lat: 53.7123, lon: 7.1519}
+  - {id: "03660", name: "Nürburg-Barweiler", state: "Rheinland-Pfalz", lat: 50.3602, lon: 6.8697}
+  - {id: "03668", name: "Nürnberg", state: "Bayern", lat: 49.503, lon: 11.0549}
+  - {id: "03987", name: "Potsdam", state: "Brandenburg", lat: 52.3812, lon: 13.0622}
+  - {id: "04271", name: "Rostock-Warnemünde", state: "Mecklenburg-Vorpommern", lat: 54.1803, lon: 12.0808}
+  - {id: "04336", name: "Saarbrücken-Ensheim", state: "Saarland", lat: 49.2128, lon: 7.1077}
+  - {id: "04393", name: "Sankt Peter-Ording", state: "Schleswig-Holstein", lat: 54.3279, lon: 8.6031}
+  - {id: "04466", name: "Schleswig", state: "Schleswig-Holstein", lat: 54.5275, lon: 9.5487}
+  - {id: "04642", name: "Seehausen", state: "Sachsen-Anhalt", lat: 52.8911, lon: 11.7297}
+  - {id: "04745", name: "Soltau", state: "Niedersachsen", lat: 52.9604, lon: 9.793}
+  - {id: "04887", name: "Stötten", state: "Baden-Württemberg", lat: 48.6656, lon: 9.8648}
+  - {id: "04928", name: "Stuttgart (Schnarrenberg)", state: "Baden-Württemberg", lat: 48.8281, lon: 9.2}
+  - {id: "05100", name: "Trier-Petrisberg", state: "Rheinland-Pfalz", lat: 49.7479, lon: 6.6583}
+  - {id: "05142", name: "Ueckermünde", state: "Mecklenburg-Vorpommern", lat: 53.7445, lon: 14.0698}
+  - {id: "05397", name: "Weiden", state: "Bayern", lat: 49.6662, lon: 12.1844}
+  - {id: "05404", name: "Weihenstephan-Dürnast", state: "Bayern", lat: 48.4024, lon: 11.6946}
+  - {id: "05426", name: "Weinbiet", state: "Rheinland-Pfalz", lat: 49.3758, lon: 8.1212}
+  - {id: "05480", name: "Werl", state: "Nordrhein-Westfalen", lat: 51.5763, lon: 7.8879}
+  - {id: "05705", name: "Würzburg", state: "Bayern", lat: 49.7704, lon: 9.9576}
+  - {id: "05779", name: "Zinnwald-Georgenfeld", state: "Sachsen", lat: 50.7313, lon: 13.7516}
+  - {id: "05792", name: "Zugspitze", state: "Bayern", lat: 47.421, lon: 10.9848}
+  - {id: "05856", name: "Fürstenzell", state: "Bayern", lat: 48.5451, lon: 13.3532}
+  - {id: "05906", name: "Mannheim", state: "Baden-Württemberg", lat: 49.5063, lon: 8.5584}
+  - {id: "06163", name: "Dörnick", state: "Schleswig-Holstein", lat: 54.1654, lon: 10.3519}
+  - {id: "06197", name: "Lügde-Paenbruch", state: "Nordrhein-Westfalen", lat: 51.8664, lon: 9.271}
+  - {id: "07325", name: "Schneefernerhaus", state: "Bayern", lat: 47.4165, lon: 10.9795}
+  - {id: "07370", name: "Waldmünchen", state: "Bayern", lat: 49.391, lon: 12.6838}
+  - {id: "15000", name: "Aachen-Orsbach", state: "Nordrhein-Westfalen", lat: 50.7983, lon: 6.0244}
+  - {id: "15444", name: "Ulm-Mähringen", state: "Baden-Württemberg", lat: 48.4418, lon: 9.9216}

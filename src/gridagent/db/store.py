@@ -225,19 +225,20 @@ def read_response(
             )
         )  # fmt: skip
     attributes = dict(table.attributes)
+    units = dict(table.series_units)
     if table.regional:
         attributes |= {"region": region, "source": "SMARD.de (Bundesnetzagentur)"}
     return TimeSeriesResponse(
         endpoint=table.endpoint,
         timezone="Europe/Berlin",
-        unit=table.unit,
+        unit=table.unit or None,
         interval_minutes=interval_minutes([row.timestamp for row in data]),
         license=table.license,
         country="de",
         bidding_zone="DE-LU" if table.endpoint == "price" else None,
         attributes=attributes | {"served_from": "database"},
         series=[SeriesInfo(id=c, name=c.replace("_", " "),
-                           unit="%" if c in PERCENT_SERIES else None) for c in present],
+                           unit="%" if c in PERCENT_SERIES else units.get(c)) for c in present],
         data=data,
     )  # fmt: skip
 
