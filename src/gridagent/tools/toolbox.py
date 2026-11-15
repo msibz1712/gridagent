@@ -33,6 +33,7 @@ from gridagent.tools.definitions import (
     NEIGHBOUR_ZONES,
     REF_PREFIX,
 )
+from gridagent.tools.flexibility import Battery, BatteryRun, plan_load, simulate_battery
 from gridagent.tools.grounding import extract_numbers, is_backed
 from gridagent.tools.stats import Operation, StatsResult, capacity_factor, compute_stats, daily
 
@@ -49,6 +50,7 @@ DATA_SOURCE = {
     "weather": "Deutscher Wetterdienst (DWD), 65 stations",
     "price_spread": f"{ENERGY_CHARTS}; prices: Bundesnetzagentur | SMARD.de",
     "redispatch": "netztransparenz.de (the four German TSOs)",
+    "battery": f"Own calculation on day-ahead prices ({ENERGY_CHARTS}; BNetzA | SMARD.de)",
 }
 # Installed-capacity series used for capacity factors (solar: AC = inverter capacity).
 CAPACITY_SERIES = {
@@ -144,6 +146,20 @@ class ZoneInput(PeriodInput):
     zone: str
 
 
+class BatteryInput(_Input):
+    ref: str
+    power_mw: float = Field(gt=0, le=10_000)
+    capacity_mwh: float = Field(gt=0, le=100_000)
+    round_trip_efficiency: float | None = None
+    wear_cost_eur_per_mwh: float | None = None
+
+
+class LoadInput(_Input):
+    ref: str
+    energy_mwh: float = Field(gt=0)
+    max_power_mw: float = Field(gt=0)
+
+
 class ToolInputError(Exception):
     """The model asked for something invalid; message is shown to the model."""
 
@@ -192,6 +208,8 @@ class ToolBox:
             "get_neighbour_price": self._get_neighbour_price,
             "get_price_spread": self._get_price_spread,
             "get_redispatch": self._get_redispatch,
+            "simulate_battery": self._simulate_battery,
+            "plan_flexible_load": self._plan_flexible_load,
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
@@ -395,6 +413,64 @@ class ToolBox:
                 result["value_gwh"] = round(result["value"] / 1000, 2)
         return result
 
+    def _price_ref(self, ref: str) -> tuple[TimeSeriesResponse, Series]:
+        response = self._ref(ref)
+        if response.endpoint != "price":
+            raise ToolInputError("This tool needs a price ref (get_day_ahead_price or "
+                                 "get_neighbour_price).")  # fmt: skip
+        return response, response.get_series("day_ahead_price")
+
+    def _simulate_battery(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Day-ahead arbitrage of a battery (see flexibility.py)."""
+        args = BatteryInput.model_validate(raw)
+        response, prices = self._price_ref(args.ref)
+        battery = Battery(
+            power_mw=args.power_mw,
+            capacity_mwh=args.capacity_mwh,
+            round_trip_efficiency=0.9 if args.round_trip_efficiency is None
+            else args.round_trip_efficiency,
+            wear_eur_per_mwh=args.wear_cost_eur_per_mwh or 0.0,
+        )  # fmt: skip
+        run = simulate_battery(prices, battery)
+        ref = self._save("simulate_battery", _battery_response(response, run))
+        missing = sum(p is None for p in run.prices)
+        return {
+            "ref": ref,
+            "zone": response.bidding_zone,
+            "period": f"{run.days[0].day} to {run.days[-1].day}",
+            "battery": {"power_mw": battery.power_mw, "capacity_mwh": battery.capacity_mwh,
+                        "duration_h": round(battery.capacity_mwh / battery.power_mw, 2),
+                        "round_trip_efficiency": battery.round_trip_efficiency,
+                        "wear_cost_eur_per_mwh": battery.wear_eur_per_mwh},
+            **run.summary(),
+            "price_intervals_missing": missing,
+            "exact": run.grid.exact,
+            "assumptions": [
+                "day-ahead market only, every day optimised with that day's known prices",
+                "starts and ends every day empty",
+                "power limit applies to the energy entering or leaving the battery cells",
+                "losses split evenly between charging and discharging",
+                "no grid fees, taxes, intraday or balancing markets, or bidding risk",
+            ] + ([] if run.grid.exact else
+                 [f"capacity rounded down to {round(run.grid.levels * run.grid.step, 3)} MWh "
+                  "for the calculation"]),
+            "series": {"battery_power": "MW (+ charging, - discharging)",
+                       "stored_energy": "MWh", "price": "EUR / MWh"},
+        }  # fmt: skip
+
+    def _plan_flexible_load(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Cheapest intervals for a shiftable consumption (see flexibility.py)."""
+        args = LoadInput.model_validate(raw)
+        response, prices = self._price_ref(args.ref)
+        if not prices.points:
+            raise NoDataError("No prices in this ref.")
+        return {
+            "zone": response.bidding_zone,
+            "period": f"{prices.start} to {prices.end}",
+            **plan_load(prices, args.energy_mwh, args.max_power_mw),
+            "note": "Day-ahead prices only; grid fees, taxes and levies are not included.",
+        }
+
     def _compare_values(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Difference, % difference, ratio and sum of two numbers the tools produced."""
         args = CompareInput.model_validate(raw)
@@ -539,6 +615,24 @@ class ToolBox:
             "data_source": DATA_SOURCE.get(response.endpoint, ENERGY_CHARTS),
             "license": response.license,
         }
+
+
+def _battery_response(prices: TimeSeriesResponse, run: BatteryRun) -> TimeSeriesResponse:
+    """The schedule as a time series, so compute_stats and the charts can use it."""
+    rows = [
+        DataRow(timestamp=t, values={"battery_power": round(e / run.interval_h, 3),
+                                     "stored_energy": round(s, 3), "price": p})
+        for t, e, s, p in zip(run.timestamps, run.grid_mwh, run.stored, run.prices, strict=True)
+    ]  # fmt: skip
+    return prices.model_copy(update={
+        "endpoint": "battery",
+        "unit": "MW",
+        "attributes": {"sign_convention": "battery_power: + charging, - discharging"},
+        "series": [SeriesInfo(id="battery_power", name="Battery power (grid side)", unit="MW"),
+                   SeriesInfo(id="stored_energy", name="Stored energy", unit="MWh"),
+                   SeriesInfo(id="price", name="Day-ahead price", unit="EUR / MWh")],
+        "data": rows,
+    })  # fmt: skip
 
 
 def _check_source(source: str) -> None:

@@ -32,6 +32,11 @@ STATS_DEFAULTS = {
 
 # ---------- oracle ----------
 
+# Optional inputs of the flexibility tools that eval cases may leave out.
+FLEX_DEFAULTS = {
+    "simulate_battery": {"round_trip_efficiency": None, "wear_cost_eur_per_mwh": None},
+}
+
 
 def oracle_llm(case: EvalCase) -> FakeLLM:
     """Scripted turns for the whole conversation: earlier turns first, then the case.
@@ -53,6 +58,11 @@ def oracle_llm(case: EvalCase) -> FakeLLM:
             args = dict(call.args)
             if call.name == "compute_stats":
                 args = {"ref": last_ref, **STATS_DEFAULTS, **args}
+            elif call.name in ("simulate_battery", "plan_flexible_load"):
+                args = {"ref": last_ref, **FLEX_DEFAULTS.get(call.name, {}), **args}
+                if call.name in REF_PREFIX:  # the battery schedule is stored as a ref
+                    fetches += 1
+                    last_ref = f"{REF_PREFIX[call.name]}_{fetches}"
             elif call.name in REF_PREFIX:
                 fetches += 1
                 last_ref = f"{REF_PREFIX[call.name]}_{fetches}"

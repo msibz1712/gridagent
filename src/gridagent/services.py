@@ -318,6 +318,16 @@ def method_step(call: ToolCallLog, where: str = "") -> str:
     elif call.name == "compare_values":
         a, b = call.input.get("a_label", "the first value"), call.input.get("b_label", "the second")
         text = f"Compared {a} with {b} (difference, percentage difference and ratio)"
+    elif call.name == "simulate_battery":
+        args = call.input
+        efficiency = args.get("round_trip_efficiency") or 0.9
+        text = (f"Optimised a {args.get('power_mw'):g} MW / {args.get('capacity_mwh'):g} MWh "
+                f"battery day by day on these prices ({efficiency:.0%} round-trip efficiency, "
+                "day-ahead market only)")  # fmt: skip
+    elif call.name == "plan_flexible_load":
+        args = call.input
+        text = (f"Chose the cheapest intervals for {args.get('energy_mwh'):g} MWh at up to "
+                f"{args.get('max_power_mw'):g} MW and compared with running evenly")  # fmt: skip
     else:
         return _fetch_step(call)
     return text + (" (failed)" if call.is_error else "")
@@ -462,6 +472,13 @@ def _chart_title(
             "increase_other": "Redispatch: increases via the exchange and other",
         }
         return titles.get(source, source) + " (MW, measures spread evenly)"
+    if response_endpoint == "battery":
+        titles = {
+            "battery_power": "Battery: charging (+) and discharging (-), MW",
+            "stored_energy": "Battery: stored energy, MWh",
+            "price": "Day-ahead price used by the battery",
+        }
+        return titles.get(source, source)
     if response_endpoint == "weather":
         if source == "wind_speed":
             return "Mean wind speed, Germany (DWD, ~10 m)"
@@ -492,6 +509,14 @@ def charts_for_run(log: RunLog, data: DataProvider, toolbox: ToolBox | None = No
         if call.name in REF_PREFIX:
             if toolbox is None:
                 replay.execute(call.name, call.input)
+        if call.name in ("simulate_battery", "plan_flexible_load"):  # simulate also stores a ref
+            pairs = [(call.input.get("ref", ""), None)]
+            if call.name == "simulate_battery":
+                try:
+                    pairs.append((json.loads(call.result)["ref"], "stored_energy"))
+                except (ValueError, KeyError, TypeError):
+                    pass
+            wanted += [p for p in pairs if p not in wanted]
         elif call.name == "compute_when":
             inputs = call.input
             pairs = [(c.get("ref", ""), c.get("source")) for c in inputs.get("conditions", [])]

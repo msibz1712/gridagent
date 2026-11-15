@@ -175,3 +175,52 @@ def redispatch_mwh(rows, lower, upper, direction: str, energy_type: str | None =
         )
         total += float(r["GESAMTE_ARBEIT_MWH"].replace(",", ".")) * share
     return total
+
+
+# ---------- flexibility (0.9.0) ----------
+
+
+def battery_profit(data: list[dict], power: float, capacity: float, rte: float = 0.9) -> float:
+    """Best day-ahead arbitrage, day by day (local date), starting and ending empty.
+
+    Written differently from gridagent.tools.flexibility on purpose: a forward pass
+    over a dict {stored units: best cash so far}. One unit = a quarter of the energy
+    the battery can move in one 15-minute interval (the grid is exact for the cases).
+    """
+    unit = power * 0.25 / 4
+    top, eta = round(capacity / unit), rte**0.5
+    total = 0.0
+    days: dict[str, list[float]] = defaultdict(list)
+    for row in data:
+        days[row["timestamp"][:10]].append(row["values"]["day_ahead_price"])
+    for prices in days.values():
+        cash = {0: 0.0}
+        for price in prices:
+            nxt: dict[int, float] = {}
+            for level, money in cash.items():
+                for move in range(-4, 5):
+                    new = level + move
+                    if 0 <= new <= top:
+                        energy = move * unit
+                        bought = energy / eta if energy > 0 else energy * eta
+                        value = money - bought * price
+                        if value > nxt.get(new, float("-inf")):
+                            nxt[new] = value
+            cash = nxt
+        total += cash[0]
+    return total
+
+
+def cheapest_load(data: list[dict], energy: float, power: float) -> tuple[float, float]:
+    """(average price paid, saving vs running evenly) for 15-minute prices."""
+    prices = sorted(r["values"]["day_ahead_price"] for r in data)
+    per_interval = power * 0.25
+    left, cost = energy, 0.0
+    for price in prices:
+        take = min(per_interval, left)
+        cost += take * price
+        left -= take
+        if left <= 0:
+            break
+    even = energy * sum(prices) / len(prices)
+    return cost / energy, even - cost

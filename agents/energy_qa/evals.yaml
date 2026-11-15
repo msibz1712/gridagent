@@ -792,3 +792,44 @@ cases:
       - {name: get_weather, args: {start: "2026-11-02", end: "2026-11-08"}}
       - {name: compute_when, args: {operation: energy, ref: redispatch_1, source: reduce_renewable, conditions: [{ref: weather_2, source: wind_speed, below: null, above: 4}]}}
     oracle_answer: "From 2 to 8 November 2026, 1204 MWh of renewable curtailment fell into the 43 hours in which the DWD station mean wind speed was above 4 m/s (hourly values; each redispatch measure's energy is spread evenly over its duration, so this is approximate). Sources: netztransparenz.de (German TSOs); Deutscher Wetterdienst (DWD)"
+
+  # ---------------- flexibility (0.9.0) ----------------
+  - id: battery_last_week
+    category: tool_use
+    min_version: 0.9.0
+    question: How much could a 10 MW / 20 MWh battery have earned on the German day-ahead market last week?
+    outcome: answer
+    numbers: [{label: battery profit EUR, values: [18163.71, 18.16]}]
+    dates: ["2026-11-02", "2026-11-08"]
+    tool_calls:
+      - {name: get_day_ahead_price, args: {start: "2026-11-02", end: "2026-11-08"}}
+      - {name: simulate_battery, args: {power_mw: 10, capacity_mwh: 20}}
+    oracle_answer: "From 2 to 8 November 2026 a 10 MW / 20 MWh battery (90 % round-trip efficiency) could have earned up to 18,163.71 EUR by trading on the German day-ahead market, with 1.84 full cycles per day, buying at 217.09 and selling at 315.56 EUR/MWh on average. This is an upper bound for day-ahead trading only (each day optimised with its known prices; no intraday or balancing markets, grid fees or bidding risk). Source: own calculation on day-ahead prices from Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+
+  - id: battery_october_default_size
+    category: ambiguous
+    min_version: 0.9.0
+    question: What could a battery have earned on the German day-ahead market in October 2026?
+    outcome: answer
+    numbers: [{label: profit per MW EUR, values: [11000.54, 11.0]}]
+    dates: ["2026-10-01", "2026-10-31"]
+    mentions: [["1 MW"]]
+    tool_calls:
+      - {name: get_day_ahead_price, args: {start: "2026-10-01", end: "2026-10-31"}}
+      - {name: simulate_battery, args: {power_mw: 1, capacity_mwh: 2}}
+    oracle_answer: "Assuming a 1 MW / 2 MWh battery with 90 % round-trip efficiency, it could have earned up to 11,000.54 EUR per MW on the German day-ahead market in October 2026 (1 to 31 October), with 2.29 full cycles per day. This is an upper bound for day-ahead trading only (each day optimised with its known prices; no intraday or balancing markets, grid fees or bidding risk). Source: own calculation on day-ahead prices from Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+
+  - id: flexible_load_yesterday
+    category: tool_use
+    min_version: 0.9.0
+    question: An electrolyser can use 20 MWh at up to 5 MW. When would that have been cheapest yesterday, and how much would it have saved compared with running evenly through the day?
+    outcome: answer
+    numbers:
+      - {label: average price paid EUR/MWh, values: [97.09, 9.709]}
+      - {label: saving EUR, values: [1292.86]}
+    dates: ["2026-11-13"]
+    mentions: [["10:30"], ["14:30"]]
+    tool_calls:
+      - {name: get_day_ahead_price, args: {start: "2026-11-13", end: "2026-11-13"}}
+      - {name: plan_flexible_load, args: {energy_mwh: 20, max_power_mw: 5}}
+    oracle_answer: "On 13 November 2026 the cheapest time for 20 MWh at 5 MW was 10:30 to 14:30, at an average day-ahead price of 97.09 EUR/MWh. That costs 1,941.84 EUR instead of 3,234.70 EUR when running evenly through the day, a saving of 1,292.86 EUR (39.97 %), before grid fees and taxes. Source: Bundesnetzagentur | SMARD.de via Energy-Charts.info"

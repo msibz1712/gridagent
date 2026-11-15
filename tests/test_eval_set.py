@@ -156,6 +156,10 @@ INDEPENDENT = {
         ic.redispatch_rows(), _RD_LOWER, _RD_UPPER, "reduzieren", tso="TenneT DE"
     ),
     "curtailment_in_windy_hours": _curtailment_in_windy_hours,
+    # ---- Flexibility (0.9.0): forward pass over the raw prices ----
+    "battery_last_week": lambda: ic.battery_profit(PRICE_WEEK, power=10, capacity=20),
+    "battery_october_default_size": lambda: ic.battery_profit(PRICE_OCT, power=1, capacity=2),
+    "flexible_load_yesterday": lambda: ic.cheapest_load(PRICE_YDAY, energy=20, power=5)[0],
     # Published figures: checked against the curated reference file instead.
     "co2_factor_2025": lambda: _reference("co2_intensity_electricity_mix", "2025"),
     "official_renewable_share_2025": lambda: _reference("renewable_share_gross_generation", "2025"),
@@ -203,6 +207,7 @@ SECOND_NUMBERS = {
         _hourly_price_october(), ic.hours_where(W_OCT, WINDY)
     ),
     "price_germany_vs_france_last_week": lambda: ic.mean(PRICE_WEEK, P),
+    "flexible_load_yesterday": lambda: ic.cheapest_load(PRICE_YDAY, energy=20, power=5)[1],
 }
 
 

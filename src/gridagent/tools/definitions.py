@@ -29,6 +29,7 @@ CAPACITY_TECHNOLOGIES = [
 
 WEATHER_SERIES = ["wind_speed", "solar_radiation"]
 SPREAD_SERIES = ["germany", "neighbour", "spread"]
+BATTERY_SERIES = ["battery_power", "stored_energy", "price"]
 # Neighbouring bidding zones whose prices Energy-Charts publishes under CC BY 4.0
 # (Bundesnetzagentur | SMARD.de). Other zones are "private and internal use only": not offered.
 NEIGHBOUR_ZONES = {
@@ -45,6 +46,7 @@ ALL_SERIES_NAMES = sorted(
     | set(WEATHER_SERIES)
     | set(SPREAD_SERIES)
     | set(REDISPATCH_SERIES)
+    | set(BATTERY_SERIES)
 )
 
 DATE = {
@@ -426,6 +428,74 @@ COMPARE_VALUES: dict[str, Any] = {
     "strict": True,
 }
 
+_PRICE_REF = {
+    "type": "string",
+    "description": "A ref from get_day_ahead_price or get_neighbour_price (e.g. 'price_1').",
+}
+
+SIMULATE_BATTERY: dict[str, Any] = {
+    "name": "simulate_battery",
+    "description": (
+        "What a battery would have earned by buying and selling on the day-ahead market, "
+        "for the prices in a price ref (Germany or a neighbour zone). Each day is optimised "
+        "exactly (dynamic programming), starting and ending empty; the whole day's prices "
+        "are known in advance, as they are after the day-ahead auction. Returns profit "
+        "(EUR, per MW, per day), revenue, charging cost, energy charged and discharged, "
+        "losses, full cycles, average buy and sell prices, the best and worst day, the "
+        "assumptions, and a `ref` with series 'battery_power' (MW, + charging, - "
+        "discharging), 'stored_energy' (MWh) and 'price' for compute_stats. This is an upper "
+        "bound for day-ahead trading only: no intraday or balancing markets, grid fees, "
+        "taxes or bidding risk."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "ref": _PRICE_REF,
+            "power_mw": {"type": "number", "description": "Charge/discharge power, MW."},
+            "capacity_mwh": {"type": "number", "description": "Usable energy capacity, MWh."},
+            "round_trip_efficiency": _nullable(
+                {"type": "number"}, "Share of charged energy that comes back (null: 0.9)."
+            ),
+            "wear_cost_eur_per_mwh": _nullable(
+                {"type": "number"}, "Degradation cost per MWh discharged, EUR (null: 0)."
+            ),
+        },
+        "required": [
+            "ref",
+            "power_mw",
+            "capacity_mwh",
+            "round_trip_efficiency",
+            "wear_cost_eur_per_mwh",
+        ],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
+PLAN_FLEXIBLE_LOAD: dict[str, Any] = {
+    "name": "plan_flexible_load",
+    "description": (
+        "The cheapest time to use a fixed amount of energy within the period of a price "
+        "ref (e.g. an electrolyser, heat pump pool or EV fleet that can shift its "
+        "consumption): picks the cheapest intervals, at most `max_power_mw` each, until "
+        "`energy_mwh` is used. Returns the blocks of operation (local time), hours running, "
+        "cost, average price paid, and the saving compared with running evenly over the "
+        "whole period. Uses day-ahead prices only (tomorrow's are available after the "
+        "auction); grid fees and taxes are not included."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "ref": _PRICE_REF,
+            "energy_mwh": {"type": "number", "description": "Energy to use, MWh."},
+            "max_power_mw": {"type": "number", "description": "Maximum power, MW."},
+        },
+        "required": ["ref", "energy_mwh", "max_power_mw"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
 ALL_TOOLS: dict[str, dict[str, Any]] = {
     t["name"]: t
     for t in (
@@ -442,6 +512,8 @@ ALL_TOOLS: dict[str, dict[str, Any]] = {
         GET_NEIGHBOUR_PRICE,
         GET_PRICE_SPREAD,
         GET_REDISPATCH,
+        SIMULATE_BATTERY,
+        PLAN_FLEXIBLE_LOAD,
     )
 }
 
@@ -455,4 +527,5 @@ REF_PREFIX = {
     "get_neighbour_price": "price",
     "get_price_spread": "spread",
     "get_redispatch": "redispatch",
+    "simulate_battery": "battery",  # stores its schedule
 }
