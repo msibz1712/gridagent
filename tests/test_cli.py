@@ -101,7 +101,8 @@ def test_eval_offline_uses_oracle_and_writes_reports(
 ) -> None:
     monkeypatch.chdir(ROOT)
     monkeypatch.setenv("GARDEN_REPORTS_DIR", str(tmp_path))
-    result = runner.invoke(cli.app, ["eval", "energy_qa", "--min-pass-rate", "1.0"])
+    # --oracle: the latest version also has a live recording, which would be replayed
+    result = runner.invoke(cli.app, ["eval", "energy_qa", "--oracle", "--min-pass-rate", "1.0"])
     assert result.exit_code == 0, result.output
     assert "oracle" in result.output and "100.0%" in result.output
     assert len(list(tmp_path.glob("*.md"))) == 1 and len(list(tmp_path.glob("*.json"))) == 1

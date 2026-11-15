@@ -176,6 +176,7 @@ def _capture_price(price: Series, generation: Series | None) -> StatsResult:
     detail: dict = {"weighted_by": generation.id}
     if average is not None:
         detail["average_price"] = round(average, 2)
+        detail["average_price_ct_per_kwh"] = round(average / 10, 3)
         if value is not None and average > 0:
             detail["capture_rate_pct"] = round(100 * value / average, 2)
     return StatsResult(
