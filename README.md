@@ -209,6 +209,7 @@ uv run garden compare energy_qa@0.6.0 energy_qa@0.7.0             # version vs v
 # Plant register (Marktstammdatenregister)
 uv run garden mastr sync                  # ~1.7 GB of the 3.3 GB export, read by HTTP range requests
 uv run garden mastr sync --light          # without solar and storage: 30 MB, under a minute
+uv run garden mastr upload                # store it in the database for the website (Docker)
 uv run garden mastr export nrw_wind.csv --state Nordrhein-Westfalen --technology wind
 
 # Database (optional; Supabase or any PostgreSQL)
@@ -228,6 +229,10 @@ APIs, and so does every request if the database is unreachable.
   only if fully covered. Reads are packed per day (half the download) and cached on disk.
 - The app reads with a read-only role; the owner credentials are used only for syncing.
 - 2018 to today for power and prices, 2020 to today for weather: about 200 MB.
+- The plant register is stored as one compressed aggregate per export (`energy.plant_register`,
+  3.7 MB; the newest four exports are kept, which shows how late registrations revise the
+  figures). The tool always needs the whole aggregate, so one read beats ~600,000 rows: the
+  website downloads it once per export (5 s), then checks for a newer one in 0.4 s.
 
 ## Project layout
 
@@ -278,7 +283,6 @@ municipality × year panel as CSV for research, with the citation the licence as
 
 ## Next steps
 
-- The plant register in the database, so the Docker website can use it.
 - Battery value on intraday prices (the day-ahead result is an upper bound only).
 - Weather per control area, and climate context against the 1991–2020 normal.
 - A nightly sync job (GitHub Actions) to keep the database current.

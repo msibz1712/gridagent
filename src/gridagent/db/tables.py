@@ -155,6 +155,15 @@ def schema_sql() -> str:
   rows_written integer not null,
   synced_at timestamptz not null default now()
 );""")
+    # The plant register aggregate (data/mastr.py) as one gzip JSON per export date:
+    # the tool always needs all of it, so one 4 MB read beats ~600,000 rows. Older
+    # exports are kept a while: comparing them shows how late registrations revise data.
+    statements.append(f"""create table if not exists {SCHEMA}.plant_register (
+  export_date date primary key,
+  complete boolean not null,
+  uploaded_at timestamptz not null default now(),
+  data bytea not null
+);""")
     # Nothing in this schema is reachable through Supabase's web API roles.
     statements.append(
         f"do $$ begin if exists (select 1 from pg_roles where rolname = 'anon') then "

@@ -586,10 +586,11 @@ def db_create_reader(
 @db_app.command("status")
 def db_status() -> None:
     """Rows, size and synced date ranges per table."""
-    from gridagent.db.store import database_bytes, status
+    from gridagent.db.store import database_bytes, init_schema, register_exports, status
 
     with _owner_connection() as conn:
-        rows, total = status(conn), database_bytes(conn)
+        init_schema(conn)  # tables added by newer versions (e.g. plant_register)
+        rows, total, exports = status(conn), database_bytes(conn), register_exports(conn)
     table = Table("table", "rows", "size", "covered")
     for row in rows:
         covered = "; ".join(
@@ -600,6 +601,9 @@ def db_status() -> None:
             row["table"], f"{row['rows']:,}", f"{row['bytes'] / 1e6:.1f} MB", covered or "-"
         )
     console.print(table)
+    for export, complete, size in exports:
+        kind = "complete" if complete else "without solar and storage"
+        console.print(f"Plant register of {export}: {kind}, {size / 1e6:.1f} MB")
     console.print(f"Database size: {total / 1e6:.1f} MB (Supabase free plan: 500 MB)")
 
 
@@ -674,6 +678,9 @@ def mastr_sync(
     url: Annotated[
         str | None, typer.Option(help="A specific export ZIP (default: newest).")
     ] = None,
+    upload: Annotated[
+        bool, typer.Option(help="Also store it in the database (for the website).")
+    ] = False,
 ) -> None:
     """Download the register's unit files and store the aggregate (takes ~30 min in full)."""
     from gridagent.data.mastr import MastrError, sync_register
@@ -687,6 +694,24 @@ def mastr_sync(
                   f"{len(data['places']):,} places -> {_register_file()}")  # fmt: skip
     if data["skipped"]:
         console.print(f"Skipped units: {data['skipped']}")
+    if upload:
+        mastr_upload()
+
+
+@mastr_app.command("upload")
+def mastr_upload() -> None:
+    """Store the downloaded register in the database, so the website (Docker) can use it."""
+    from gridagent.db.store import init_schema, upload_register
+
+    if not _register_file().is_file():
+        console.print("[red]No register yet:[/] run `garden mastr sync` first.")
+        raise typer.Exit(code=1)
+    blob = _register_file().read_bytes()
+    with _owner_connection() as conn:
+        init_schema(conn)
+        export, complete = upload_register(conn, blob)
+    kind = "complete" if complete else "without solar and storage"
+    console.print(f"Uploaded the plant register of {export} ({kind}, {len(blob) / 1e6:.1f} MB).")
 
 
 @mastr_app.command("export")

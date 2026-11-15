@@ -264,3 +264,15 @@ def test_groups_carry_their_share_of_the_area(register) -> None:
     """A live run computed '42 % of the state's lignite' mentally: the tool now gives it."""
     groups = query(register, "wind", state="Nordrhein-Westfalen", group_by="municipality")["groups"]
     assert sum(g["share_of_installed_pct"] for g in groups) == pytest.approx(100)
+
+
+def test_hybrid_falls_back_to_the_local_copy_without_a_database_register() -> None:
+    from gridagent.db.source import HybridDataSource, NotInDatabase
+
+    class EmptyDatabase:
+        def plant_register(self):
+            raise NotInDatabase("no plant register uploaded")
+
+    hybrid = HybridDataSource(EmptyDatabase(), live=FixtureDataSource(FIXTURE_DIR))
+    assert hybrid.plant_register()["export_date"] == "2026-10-01"
+    assert hybrid.last_served_from == "live"

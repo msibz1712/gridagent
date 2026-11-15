@@ -362,3 +362,51 @@ def test_other_bidding_zones_never_get_germanys_prices(synced_url: str) -> None:
     hybrid = HybridDataSource(DatabaseDataSource(synced_url), live=Live())
     hybrid.day_ahead_price(*WEEK, bzn="FR")
     assert asked == ["FR"] and hybrid.last_served_from == "live"
+
+
+# ---------- plant register ----------
+
+
+def _register_blob(export: str, complete: bool) -> bytes:
+    """The committed excerpt with another date / completeness, as `mastr sync` writes it."""
+    import gzip
+
+    data = json.loads(gzip.decompress((FIXTURE_DIR / "mastr" / "register_excerpt.json.gz")
+                                      .read_bytes()))  # fmt: skip
+    return gzip.compress(json.dumps(data | {"export_date": export, "complete": complete}).encode())
+
+
+def test_register_upload_keeps_the_newest_and_never_downgrades(synced_url: str) -> None:
+    from gridagent.db.store import latest_register, register_exports, upload_register
+
+    with connect(synced_url) as conn:
+        for day in range(1, 7):  # six exports: only the newest four are kept
+            upload_register(conn, _register_blob(f"2026-10-0{day}", complete=True))
+        assert [e[0].day for e in register_exports(conn)] == [6, 5, 4, 3]
+        upload_register(conn, _register_blob("2026-10-06", complete=False))  # light, same day
+        assert latest_register(conn) == (date(2026, 10, 6), True)  # the complete copy stays
+
+
+def test_register_is_served_from_the_database_and_cached(synced_url: str, tmp_path) -> None:
+    from gridagent.db.store import upload_register
+
+    with connect(synced_url) as conn:
+        upload_register(conn, _register_blob("2026-10-09", complete=False))
+    db = DatabaseDataSource(synced_url, cache_dir=tmp_path)
+    assert db.plant_register()["export_date"] == "2026-10-09"
+    assert (tmp_path / "mastr" / "register_2026-10-09.json.gz").is_file()
+    box = ToolBox(HybridDataSource(db, live=fixtures), today=lambda: date(2026, 11, 14))
+    args = {"technology": "lignite", "area_type": "state", "area": "Nordrhein-Westfalen",
+            "from_year": 2026, "to_year": 2026, "group_by": "none"}  # fmt: skip
+    result = json.loads(box.execute("get_plant_register", args).content)
+    assert result["register_date"] == "2026-10-09" and result["installed_mw"] > 5000
+
+
+def test_select_only_role_can_read_the_register(synced_url: str) -> None:
+    """The website reads with the read-only role: new tables must be readable for it too."""
+    from gridagent.db.store import create_reader, reader_url
+
+    with connect(synced_url) as conn:
+        create_reader(conn, "reader-test-pw")
+    with connect(reader_url(synced_url, "reader-test-pw")) as conn:
+        assert conn.execute("select count(*) from energy.plant_register").fetchone()[0] >= 1

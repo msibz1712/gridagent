@@ -15,15 +15,25 @@ the latest sync of that period: asking about the same period again skips the
 download (the slow part), and re-syncing the period makes the cached copy stale.
 """
 
+import gzip
+import json
 from datetime import date
 from pathlib import Path
 
 import psycopg
 
 from gridagent.data.cache import ResponseCache
+from gridagent.data.mastr import load_register
 from gridagent.data.models import TimeSeriesResponse
 from gridagent.data.provider import DataProvider
-from gridagent.db.store import connect, is_covered, last_sync_id, read_response
+from gridagent.db.store import (
+    connect,
+    is_covered,
+    last_sync_id,
+    latest_register,
+    read_register,
+    read_response,
+)
 from gridagent.db.tables import TABLES
 
 
@@ -34,7 +44,9 @@ class NotInDatabase(Exception):
 class DatabaseDataSource:
     def __init__(self, url: str, cache_dir: Path | None = None) -> None:
         self.url = url
+        self.cache_dir = cache_dir
         self.cache = ResponseCache(cache_dir) if cache_dir is not None else None
+        self._register: tuple[date, dict] | None = None  # (export date, aggregate) in memory
 
     def _read(
         self, table_name: str, start: date, end: date, region: str = ""
@@ -88,8 +100,26 @@ class DatabaseDataSource:
     def redispatch(self, start: date, end: date):
         raise NotInDatabase("redispatch measures are not stored (licence: own analysis only)")
 
-    def plant_register(self):
-        raise NotInDatabase("the plant register is a local file (garden mastr sync)")
+    def plant_register(self) -> dict:
+        """The newest uploaded register. One small query per call checks for a newer
+        export; the 4 MB aggregate itself is downloaded once per export (disk + memory)."""
+        with connect(self.url) as conn:
+            latest = latest_register(conn)
+            if latest is None:
+                raise NotInDatabase("no plant register uploaded (garden mastr upload)")
+            export, _complete = latest
+            if self._register is not None and self._register[0] == export:
+                return self._register[1]
+            file = (self.cache_dir / "mastr" / f"register_{export}.json.gz"
+                    if self.cache_dir is not None else None)  # fmt: skip
+            if file is None or not file.is_file():
+                blob = read_register(conn, export)
+                if file is not None:
+                    file.parent.mkdir(parents=True, exist_ok=True)
+                    file.write_bytes(blob)
+        data = load_register(file) if file is not None else json.loads(gzip.decompress(blob))
+        self._register = (export, data)
+        return data
 
     def regional(
         self, region: str, sources: list[str], start: date, end: date
@@ -145,7 +175,13 @@ class HybridDataSource:
         return self.live.redispatch(start, end)
 
     def plant_register(self):
-        return self.live.plant_register()
+        try:
+            data = self.database.plant_register()
+            self.last_served_from = "database"
+            return data
+        except (NotInDatabase, psycopg.Error):
+            self.last_served_from = "live"  # the local copy from `garden mastr sync`
+            return self.live.plant_register()
 
     def regional(
         self, region: str, sources: list[str], start: date, end: date

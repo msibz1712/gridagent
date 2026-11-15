@@ -10,6 +10,8 @@ least one value in the period are included, so "series absent in this period"
 (e.g. nuclear after April 2023) stays distinguishable from "value missing".
 """
 
+import gzip
+import json
 import sys
 from array import array
 from datetime import UTC, date, datetime, time, timedelta
@@ -241,6 +243,62 @@ def read_response(
                            unit="%" if c in PERCENT_SERIES else units.get(c)) for c in present],
         data=data,
     )  # fmt: skip
+
+
+# ---------- plant register (one compressed aggregate per export) ----------
+
+REGISTER_EXPORTS_KEPT = 4
+
+
+def upload_register(conn: psycopg.Connection, gz_bytes: bytes) -> tuple[str, bool]:
+    """Store a register aggregate (the .json.gz `garden mastr sync` writes); keep the newest 4.
+
+    Returns (export date, complete). A complete copy is never replaced by a light one
+    of the same day.
+    """
+    data = json.loads(gzip.decompress(gz_bytes))
+    export, complete = data["export_date"], bool(data.get("complete", True))
+    conn.execute(
+        f"""insert into {SCHEMA}.plant_register (export_date, complete, data)
+            values (%s, %s, %s)
+            on conflict (export_date) do update
+            set complete = excluded.complete, data = excluded.data, uploaded_at = now()
+            where excluded.complete or not {SCHEMA}.plant_register.complete""",
+        (export, complete, gz_bytes),
+    )
+    conn.execute(
+        f"""delete from {SCHEMA}.plant_register where export_date not in (
+              select export_date from {SCHEMA}.plant_register
+              order by export_date desc limit %s)""",
+        (REGISTER_EXPORTS_KEPT,),
+    )
+    conn.commit()
+    return export, complete
+
+
+def latest_register(conn: psycopg.Connection) -> tuple[date, bool] | None:
+    """(export date, complete) of the newest stored register, without downloading it."""
+    return conn.execute(
+        f"select export_date, complete from {SCHEMA}.plant_register "
+        "order by export_date desc limit 1"
+    ).fetchone()
+
+
+def read_register(conn: psycopg.Connection, export: date) -> bytes:
+    row = conn.execute(
+        f"select data from {SCHEMA}.plant_register where export_date = %s", (export,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"No plant register of {export} in the database.")
+    return bytes(row[0])
+
+
+def register_exports(conn: psycopg.Connection) -> list[tuple[date, bool, int]]:
+    """(export date, complete, bytes) of every stored register, newest first."""
+    return conn.execute(
+        f"select export_date, complete, length(data) from {SCHEMA}.plant_register "
+        "order by export_date desc"
+    ).fetchall()
 
 
 # ---------- status ----------
