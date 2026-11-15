@@ -224,3 +224,41 @@ def cheapest_load(data: list[dict], energy: float, power: float) -> tuple[float,
             break
     even = energy * sum(prices) / len(prices)
     return cost / energy, even - cost
+
+
+# ---------- plant register (0.10.0) ----------
+
+
+def register_mw(
+    technology: str, state: str, district: str | None = None, from_year: int | None = None
+) -> tuple[float, float]:
+    """(installed MW at the register date, MW added since from_year), from the raw rows."""
+    import gzip
+
+    with gzip.open(FIXTURES / "mastr" / "register_excerpt.json.gz", "rt", encoding="utf-8") as fh:
+        data = json.load(fh)
+    installed = added = 0.0
+    for key, tech, year, _au, added_kw, _ru, removed_kw, _c in data["rows"]:
+        _name, place_district, place_state = data["places"][key]
+        if tech != technology or place_state != state:
+            continue
+        if district is not None and place_district != district:
+            continue
+        installed += added_kw - removed_kw
+        if from_year is not None and year >= from_year:
+            added += added_kw
+    return installed / 1000, added / 1000
+
+
+def register_top_district(technology: str, state: str) -> tuple[str, float]:
+    import gzip
+
+    with gzip.open(FIXTURES / "mastr" / "register_excerpt.json.gz", "rt", encoding="utf-8") as fh:
+        data = json.load(fh)
+    by_district: dict[str, float] = defaultdict(float)
+    for key, tech, _year, _au, added_kw, _ru, removed_kw, _c in data["rows"]:
+        _name, district, place_state = data["places"][key]
+        if tech == technology and place_state == state:
+            by_district[district] += (added_kw - removed_kw) / 1000
+    name = max(by_district, key=by_district.get)
+    return name, by_district[name]

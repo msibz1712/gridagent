@@ -160,6 +160,13 @@ INDEPENDENT = {
     "battery_last_week": lambda: ic.battery_profit(PRICE_WEEK, power=10, capacity=20),
     "battery_october_default_size": lambda: ic.battery_profit(PRICE_OCT, power=1, capacity=2),
     "flexible_load_yesterday": lambda: ic.cheapest_load(PRICE_YDAY, energy=20, power=5)[0],
+    # ---- Plant register (0.10.0): raw rows of the MaStR excerpt ----
+    "register_wind_nrw_since_2023": lambda: ic.register_mw(
+        "wind_onshore", "Nordrhein-Westfalen", from_year=2023
+    )[1],
+    "register_lignite_top_district_nrw": lambda: ic.register_top_district(
+        "lignite", "Nordrhein-Westfalen"
+    )[1],
     # Published figures: checked against the curated reference file instead.
     "co2_factor_2025": lambda: _reference("co2_intensity_electricity_mix", "2025"),
     "official_renewable_share_2025": lambda: _reference("renewable_share_gross_generation", "2025"),
@@ -177,7 +184,7 @@ def test_eval_set_size_and_coverage() -> None:
     core = [c for c in eval_set.cases if c.min_version is None]
     assert any(c.previous for c in eval_set.cases)  # conversations are covered
     assert 20 <= len(core) <= 30
-    assert len(eval_set.cases) <= 65  # kept small: every live run costs money
+    assert len(eval_set.cases) <= 70  # kept small: every live run costs money
     categories = {c.category for c in eval_set.cases}
     assert {"factual", "tool_use", "ambiguous", "missing_data", "future", "refusal"} <= categories
 
@@ -208,6 +215,9 @@ SECOND_NUMBERS = {
     ),
     "price_germany_vs_france_last_week": lambda: ic.mean(PRICE_WEEK, P),
     "flexible_load_yesterday": lambda: ic.cheapest_load(PRICE_YDAY, energy=20, power=5)[1],
+    "register_wind_nrw_since_2023": lambda: ic.register_mw("wind_onshore", "Nordrhein-Westfalen")[
+        0
+    ],
 }
 
 

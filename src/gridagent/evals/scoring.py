@@ -64,7 +64,8 @@ NO_DATA_PHRASES = (
 )
 SOURCE_PHRASES = (
     "energy-charts", "smard", "fraunhofer", "umweltbundesamt", "uba", "bdew",
-    "netztransparenz", "energiebilanzen", "dwd", "wetterdienst",
+    "netztransparenz", "energiebilanzen", "dwd", "wetterdienst", "marktstammdatenregister",
+    "mastr",
 )  # fmt: skip
 MONTHS = [
     "january",

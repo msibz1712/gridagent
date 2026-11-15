@@ -1,0 +1,33 @@
+name: energy_qa
+version: 0.10.0
+description: Answers research questions about Germany's electricity system (generation, prices, cross-border flows, control areas, capacity, flexibility, regional plant register) with official reference figures.
+owner: msibz1712
+model:
+  name: claude-haiku-5-5  # 0.2.0: ~20x cheaper per token than claude-sonnet-5-5
+  max_tokens: 16000
+  effort: medium
+  refusal_fallback: false  # no server-side refusal fallback for Haiku 5.5
+tools:
+  - get_generation
+  - get_day_ahead_price
+  - get_cross_border_flows
+  - get_regional_generation
+  - get_installed_capacity
+  - get_reference_statistics
+  - compute_stats
+  - compare_values  # 0.5.0: differences, % changes and ratios via a tool, not mental arithmetic
+  - get_weather  # 0.6.0: DWD wind and solar indicators
+  - compute_when  # 0.6.0: conditions -> effect (e.g. price in calm hours)
+  - get_neighbour_price  # 0.7.0: prices of neighbouring bidding zones (CC BY 4.0 only)
+  - get_price_spread  # 0.7.0: Germany minus neighbour, hour by hour
+  - get_redispatch  # 0.8.0: congestion management by the TSOs (netztransparenz.de)
+  - simulate_battery  # 0.9.0: what a battery would have earned day-ahead
+  - plan_flexible_load  # 0.9.0: cheapest hours for a shiftable load
+  - get_plant_register  # 0.10.0: every plant by state, district, municipality (MaStR)
+limits:
+  max_steps: 14  # 0.6.0: weather analyses fetch weather + data, then compute
+  model_timeout_seconds: 60
+  model_max_retries: 2
+  run_timeout_seconds: 180
+system_prompt_file: system_prompt.md
+eval_set: ../evals.yaml

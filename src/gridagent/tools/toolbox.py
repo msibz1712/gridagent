@@ -35,6 +35,7 @@ from gridagent.tools.definitions import (
 )
 from gridagent.tools.flexibility import Battery, BatteryRun, plan_load, simulate_battery
 from gridagent.tools.grounding import extract_numbers, is_backed
+from gridagent.tools.register import PlantRegister, query
 from gridagent.tools.stats import Operation, StatsResult, capacity_factor, compute_stats, daily
 
 MAX_DAYS = 93
@@ -154,6 +155,16 @@ class BatteryInput(_Input):
     wear_cost_eur_per_mwh: float | None = None
 
 
+class RegisterInput(_Input):
+    technology: str
+    state: str | None = None
+    district: str | None = None
+    municipality: str | None = None
+    from_year: int | None = Field(None, ge=1900, le=2100)
+    to_year: int | None = Field(None, ge=1900, le=2100)
+    group_by: Literal["state", "district", "municipality", "technology", "year"] | None = None
+
+
 class LoadInput(_Input):
     ref: str
     energy_mwh: float = Field(gt=0)
@@ -210,6 +221,7 @@ class ToolBox:
             "get_redispatch": self._get_redispatch,
             "simulate_battery": self._simulate_battery,
             "plan_flexible_load": self._plan_flexible_load,
+            "get_plant_register": self._get_plant_register,
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
@@ -469,6 +481,20 @@ class ToolBox:
             "period": f"{prices.start} to {prices.end}",
             **plan_load(prices, args.energy_mwh, args.max_power_mw),
             "note": "Day-ahead prices only; grid fees, taxes and levies are not included.",
+        }
+
+    def _get_plant_register(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Installed capacity and changes from the MaStR aggregate (see tools/register.py)."""
+        args = RegisterInput.model_validate(raw)
+        register = PlantRegister(self.data.plant_register())
+        result = query(register, args.technology, args.state, args.district, args.municipality,
+                       args.from_year, args.to_year, args.group_by)  # fmt: skip
+        return result | {
+            "data_source": "Marktstammdatenregister (Bundesnetzagentur)",
+            "license": register.data["license"],
+            "note": "Years by commissioning date; installed = commissioned minus permanently "
+            "decommissioned; planned units are only those registered as planned. Units are "
+            "often registered months late, so the latest months are revised upward later.",
         }
 
     def _compare_values(self, raw: dict[str, Any]) -> dict[str, Any]:

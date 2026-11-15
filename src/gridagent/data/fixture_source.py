@@ -10,8 +10,10 @@ just like the real APIs do for missing data. SMARD files are read from
 import json
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from gridagent.data.client import NoDataError
+from gridagent.data.mastr import load_register
 from gridagent.data.models import TimeSeriesResponse
 from gridagent.data.netztransparenz import Measure, day_bounds_utc, parse_measures
 from gridagent.data.provider import DataProvider
@@ -58,6 +60,13 @@ class FixtureDataSource:
 
     def weather(self, start: date, end: date) -> TimeSeriesResponse:
         return self._find("weather", start, end)
+
+    def plant_register(self) -> dict[str, Any]:
+        """A real excerpt of the register (see fixtures/mastr/README.md)."""
+        file = self.directory / "mastr" / "register_excerpt.json.gz"
+        if not file.is_file():
+            raise NoDataError("No recorded plant register.")
+        return load_register(file)
 
     def redispatch(self, start: date, end: date) -> list[Measure]:
         """SYNTHETIC measures (see fixtures/ntp/README.md): real data may not be committed."""

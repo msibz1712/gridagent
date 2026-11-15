@@ -10,11 +10,13 @@ required and use `null` for "not given", which keeps the schemas simple.
 
 from typing import Any
 
+from gridagent.data.mastr import TECHNOLOGIES, TECHNOLOGY_GROUPS
 from gridagent.data.netztransparenz import SERIES_NAMES as REDISPATCH_SERIES
 from gridagent.data.reference import load_reference_data
 from gridagent.data.smard import FILTERS as SMARD_SOURCES
 from gridagent.data.smard import REGIONS
 from gridagent.data.sources import available_sources
+from gridagent.tools.register import STATES
 from gridagent.tools.stats import Operation
 
 NEIGHBOURS = [
@@ -29,6 +31,8 @@ CAPACITY_TECHNOLOGIES = [
 
 WEATHER_SERIES = ["wind_speed", "solar_radiation"]
 SPREAD_SERIES = ["germany", "neighbour", "spread"]
+REGISTER_TECHNOLOGIES = [*TECHNOLOGY_GROUPS, *TECHNOLOGIES]
+REGISTER_STATES = STATES
 BATTERY_SERIES = ["battery_power", "stored_energy", "price"]
 # Neighbouring bidding zones whose prices Energy-Charts publishes under CC BY 4.0
 # (Bundesnetzagentur | SMARD.de). Other zones are "private and internal use only": not offered.
@@ -496,6 +500,50 @@ PLAN_FLEXIBLE_LOAD: dict[str, Any] = {
     "strict": True,
 }
 
+_NULLABLE_TEXT = {"type": "string"}
+_YEAR = {"type": "integer"}
+
+GET_PLANT_REGISTER: dict[str, Any] = {
+    "name": "get_plant_register",
+    "description": (
+        "Installed power plants and storage from the Marktstammdatenregister (MaStR, "
+        "Bundesnetzagentur; every unit in Germany down to balcony solar), for Germany, a "
+        "federal state, a district (Landkreis or kreisfreie Stadt) or a municipality. Returns "
+        "capacity and number of units installed at the end of `to_year` (latest: the register "
+        "date), what was added and permanently decommissioned from `from_year` to `to_year` "
+        "(by commissioning / decommissioning year), net change, units registered as planned, "
+        "and for wind the capacity added as community energy (Bürgerenergie). `group_by` "
+        "splits the result by state, district, municipality, technology or year (years: "
+        "added and removed that year and installed at its end; places: top 25 by capacity "
+        "added). Temporarily closed units count as installed. Technologies: groups wind, "
+        "solar, renewable, coal, fossil, storage, or single types (solar_rooftop, "
+        "solar_ground, solar_balcony, lignite, battery, ...). Battery and storage figures "
+        "are power (MW), not energy capacity. Small tables are returned directly (no ref)."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "technology": {"type": "string", "enum": REGISTER_TECHNOLOGIES},
+            "state": _nullable({"type": "string", "enum": REGISTER_STATES},
+                               "Federal state in German (null: Germany)."),
+            "district": _nullable(_NULLABLE_TEXT, "District name as in the register, e.g. "
+                                  "'Düren', 'Rhein-Erft-Kreis', 'Köln' (null: all)."),
+            "municipality": _nullable(_NULLABLE_TEXT, "Municipality name (null: all)."),
+            "from_year": _nullable(_YEAR, "First year of the changes (null: same as to_year)."),
+            "to_year": _nullable(_YEAR, "Last year; installed is at its end (null: latest)."),
+            "group_by": _nullable(
+                {"type": "string",
+                 "enum": ["state", "district", "municipality", "technology", "year"]},
+                "Split the result (null: totals only).",
+            ),
+        },
+        "required": ["technology", "state", "district", "municipality", "from_year",
+                     "to_year", "group_by"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}  # fmt: skip
+
 ALL_TOOLS: dict[str, dict[str, Any]] = {
     t["name"]: t
     for t in (
@@ -514,6 +562,7 @@ ALL_TOOLS: dict[str, dict[str, Any]] = {
         GET_REDISPATCH,
         SIMULATE_BATTERY,
         PLAN_FLEXIBLE_LOAD,
+        GET_PLANT_REGISTER,
     )
 }
 

@@ -656,3 +656,64 @@ def db_sync(
         console.print(f"[yellow]Skipped:[/] {len(report.skipped)} chunk(s)")
         for item in report.skipped:
             console.print(f"  {item}")
+
+
+mastr_app = typer.Typer(help="Marktstammdatenregister: every power plant and storage unit.")
+app.add_typer(mastr_app, name="mastr")
+
+
+def _register_file() -> Path:
+    return _path("GARDEN_CACHE_DIR", ".cache") / "mastr" / "register.json.gz"
+
+
+@mastr_app.command("sync")
+def mastr_sync(
+    light: Annotated[
+        bool, typer.Option(help="Skip solar and storage (~1.6 GB of the ~1.7 GB download).")
+    ] = False,
+    url: Annotated[
+        str | None, typer.Option(help="A specific export ZIP (default: newest).")
+    ] = None,
+) -> None:
+    """Download the register's unit files and store the aggregate (takes ~30 min in full)."""
+    from gridagent.data.mastr import MastrError, sync_register
+
+    try:
+        data = sync_register(_register_file(), url=url, skip_heavy=light, progress=console.print)
+    except MastrError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"Register of {data['export_date']}: {len(data['rows']):,} rows, "
+                  f"{len(data['places']):,} places -> {_register_file()}")  # fmt: skip
+    if data["skipped"]:
+        console.print(f"Skipped units: {data['skipped']}")
+
+
+@mastr_app.command("export")
+def mastr_export(
+    out: Annotated[Path, typer.Argument(help="CSV file to write.")],
+    technology: Annotated[str, typer.Option(help="e.g. wind_onshore, solar, coal.")] = "wind",
+    state: Annotated[str | None, typer.Option(help="e.g. Nordrhein-Westfalen.")] = None,
+    first_year: Annotated[int, typer.Option(help="First year in the panel.")] = 2000,
+) -> None:
+    """Municipality x technology x year panel as CSV (dl-de/by-2-0: cite the source)."""
+    import csv
+
+    from gridagent.data.mastr import ATTRIBUTION, load_register
+    from gridagent.tools.register import PANEL_COLUMNS, PlantRegister, RegisterQueryError, panel
+
+    if not _register_file().is_file():
+        console.print("[red]No register yet:[/] run `garden mastr sync` first.")
+        raise typer.Exit(code=1)
+    register = PlantRegister(load_register(_register_file()))
+    try:
+        rows = panel(register, state, technology, first_year)
+    except RegisterQueryError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+    with out.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=PANEL_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    console.print(f"{len(rows):,} rows -> {out}")
+    console.print(f"Source to cite: {ATTRIBUTION}, register of {register.export_date}.")

@@ -206,6 +206,11 @@ REDISPATCH_SOURCE = {
     "url": "https://www.netztransparenz.de",
     "license": "© German TSOs; not openly licensed, used for own analysis",
 }
+MASTR_SOURCE = {
+    "name": "Marktstammdatenregister (Bundesnetzagentur), power plant register",
+    "url": "https://www.marktstammdatenregister.de",
+    "license": "dl-de/by-2-0",
+}
 WEATHER_SOURCE = {
     "name": "Deutscher Wetterdienst (DWD), station observations",
     "url": "https://opendata.dwd.de",
@@ -324,6 +329,8 @@ def method_step(call: ToolCallLog, where: str = "") -> str:
         text = (f"Optimised a {args.get('power_mw'):g} MW / {args.get('capacity_mwh'):g} MWh "
                 f"battery day by day on these prices ({efficiency:.0%} round-trip efficiency, "
                 "day-ahead market only)")  # fmt: skip
+    elif call.name == "get_plant_register":
+        text = _register_step(call.input)
     elif call.name == "plan_flexible_load":
         args = call.input
         text = (f"Chose the cheapest intervals for {args.get('energy_mwh'):g} MWh at up to "
@@ -331,6 +338,16 @@ def method_step(call: ToolCallLog, where: str = "") -> str:
     else:
         return _fetch_step(call)
     return text + (" (failed)" if call.is_error else "")
+
+
+def _register_step(args: dict) -> str:
+    area = args.get("municipality") or args.get("district") or args.get("state") or "Germany"
+    what = source_label(args.get("technology")) if args.get("technology") else "power plants"
+    years = ""
+    if args.get("from_year") or args.get("to_year"):
+        years = f", {args.get('from_year') or args.get('to_year')}–{args.get('to_year') or 'today'}"
+    split = f", by {args['group_by']}" if args.get("group_by") else ""
+    return f"Looked up {what} capacity in {area} in the power plant register{years}{split}"
 
 
 def _reference_step(call: ToolCallLog) -> str:
@@ -400,6 +417,8 @@ def sources_for_run(log: RunLog) -> list[dict[str, str]]:
         sources.append(WEATHER_SOURCE)
     if "get_redispatch" in names:
         sources.append(REDISPATCH_SOURCE)
+    if "get_plant_register" in names:
+        sources.append(MASTR_SOURCE)
     for call in ok:
         if call.name != "get_reference_statistics":
             continue

@@ -194,12 +194,13 @@ def test_flexibility_tools_need_a_price_ref() -> None:
 
 
 def test_battery_answer_gets_method_steps_and_charts() -> None:
+    from test_loop import AGENTS_DIR
+
     from gridagent import services
     from gridagent.agent.loop import Agent
     from gridagent.evals.offline import oracle_llm
     from gridagent.evals.session import load_agent_eval_set
     from gridagent.garden.registry import resolve
-    from test_loop import AGENTS_DIR
 
     agent = resolve(AGENTS_DIR, "energy_qa@0.9.0")
     eval_set, _ = load_agent_eval_set(agent)

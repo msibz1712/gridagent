@@ -88,6 +88,9 @@ class DatabaseDataSource:
     def redispatch(self, start: date, end: date):
         raise NotInDatabase("redispatch measures are not stored (licence: own analysis only)")
 
+    def plant_register(self):
+        raise NotInDatabase("the plant register is a local file (garden mastr sync)")
+
     def regional(
         self, region: str, sources: list[str], start: date, end: date
     ) -> TimeSeriesResponse:
@@ -140,6 +143,9 @@ class HybridDataSource:
 
     def redispatch(self, start: date, end: date):
         return self.live.redispatch(start, end)
+
+    def plant_register(self):
+        return self.live.plant_register()
 
     def regional(
         self, region: str, sources: list[str], start: date, end: date

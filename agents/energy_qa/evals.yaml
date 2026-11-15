@@ -833,3 +833,38 @@ cases:
       - {name: get_day_ahead_price, args: {start: "2026-11-13", end: "2026-11-13"}}
       - {name: plan_flexible_load, args: {energy_mwh: 20, max_power_mw: 5}}
     oracle_answer: "On 13 November 2026 the cheapest time for 20 MWh at 5 MW was 10:30 to 14:30, at an average day-ahead price of 97.09 EUR/MWh. That costs 1,941.84 EUR instead of 3,234.70 EUR when running evenly through the day, a saving of 1,292.86 EUR (39.97 %), before grid fees and taxes. Source: Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+
+  # ---------------- plant register (0.10.0), MaStR excerpt of 1 Oct 2026 ----------------
+  - id: register_wind_nrw_since_2023
+    category: factual
+    min_version: 0.10.0
+    question: How much onshore wind capacity was added in North Rhine-Westphalia since 2023, and how much is installed now?
+    outcome: answer
+    numbers:
+      - {label: added since 2023 MW, values: [3530.85, 3.53]}
+      - {label: installed MW, values: [9899.26, 9.9]}
+    mentions: [["2023"]]
+    tool_calls:
+      - {name: get_plant_register, args: {technology: wind_onshore, state: Nordrhein-Westfalen, from_year: 2023}}
+    oracle_answer: "According to the Marktstammdatenregister (register of 1 October 2026), 3,530.85 MW of onshore wind were commissioned in Nordrhein-Westfalen from 2023 to 1 October 2026; 9,899.26 MW are installed. Figures for 2026 are preliminary because units are often registered late. Source: Marktstammdatenregister (Bundesnetzagentur), dl-de/by-2-0"
+
+  - id: register_lignite_top_district_nrw
+    category: tool_use
+    min_version: 0.10.0
+    question: Which district in NRW has the most lignite power plant capacity?
+    outcome: answer
+    numbers: [{label: lignite MW, values: [2471.8, 2.47]}]
+    mentions: [["Rhein-Erft"]]
+    tool_calls:
+      - {name: get_plant_register, args: {technology: lignite, state: Nordrhein-Westfalen, group_by: district}}
+    oracle_answer: "The Rhein-Erft-Kreis has the most lignite capacity in Nordrhein-Westfalen: 2,471.8 MW installed according to the Marktstammdatenregister (register of 1 October 2026), ahead of the Rhein-Kreis Neuss (2,120 MW) and the Städteregion Aachen (1,319 MW). Large plants are published by district, not municipality. Source: Marktstammdatenregister (Bundesnetzagentur), dl-de/by-2-0"
+
+  - id: register_solar_not_in_excerpt
+    category: missing_data
+    min_version: 0.10.0
+    question: How much rooftop solar is installed in Köln?
+    outcome: no_data
+    tool_calls:
+      - {name: get_plant_register, args: {technology: solar_rooftop, district: Köln}}
+    oracle_answer: "Solar data is not available in the copy of the plant register I can use (it was downloaded without solar and storage), so I cannot give the rooftop solar capacity in Köln. Source: Marktstammdatenregister (Bundesnetzagentur), dl-de/by-2-0"
+
