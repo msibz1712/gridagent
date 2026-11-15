@@ -84,6 +84,15 @@ INDEPENDENT = {
     "followup_highest_price_same_day": lambda: ic.peak(PRICE_YDAY, P)[0],
     "followup_compare_control_area": lambda: sum(ic.smard_week(4068, "50Hertz")) / 1000,
     "followup_market_value_wind": lambda: ic.capture_price(GEN_OCT, PRICE_OCT, "wind_onshore"),
+    # ---- Comparisons (0.5.0) ----
+    "solar_market_value_difference_official": lambda: (
+        ic.capture_price(GEN_OCT, PRICE_OCT, "solar") / 10
+    ),
+    "price_week_vs_october": lambda: ic.mean(PRICE_WEEK, P),
+    # compare_values works on the figures as reported (2 decimals), like a reader would
+    "followup_wind_solar_ratio": lambda: (
+        round(ic.share_pct(GEN_WEEK, "wind"), 2) / round(ic.share_pct(GEN_WEEK, "solar"), 2)
+    ),
     # Published figures: checked against the curated reference file instead.
     "co2_factor_2025": lambda: _reference("co2_intensity_electricity_mix", "2025"),
     "official_renewable_share_2025": lambda: _reference("renewable_share_gross_generation", "2025"),
@@ -124,12 +133,38 @@ SECOND_NUMBERS = {
         "cbet_de_2026-11-02_2026-11-08.json", "sum"
     ),
     "installed_solar_vs_2030_target": lambda: _installed("2030", "solar_planned_eeg_2023"),
-    "solar_market_value_october": lambda: next(
-        v["value"]
-        for v in lookup("market_value_monthly", "2026-10")["values"]
-        if v["key"] == "solar"
+    "solar_market_value_october": lambda: _official_solar_october(),
+    "solar_market_value_difference_official": lambda: _official_solar_october(),
+    "price_week_vs_october": lambda: ic.mean(PRICE_OCT, P),
+}
+
+
+def _official_solar_october() -> float:
+    values = lookup("market_value_monthly", "2026-10")["values"]
+    return next(v["value"] for v in values if v["key"] == "solar")
+
+
+# Comparisons: the third expected number is the comparison itself, from reported figures.
+def _reported(x: float, decimals: int = 2) -> float:
+    return round(x, decimals)
+
+
+THIRD_NUMBERS = {
+    "solar_market_value_difference_official": lambda: (
+        _reported(ic.capture_price(GEN_OCT, PRICE_OCT, "solar") / 10, 3) - _official_solar_october()
+    ),
+    "price_week_vs_october": lambda: (
+        100
+        * (_reported(ic.mean(PRICE_WEEK, P)) - _reported(ic.mean(PRICE_OCT, P)))
+        / _reported(ic.mean(PRICE_OCT, P))
     ),
 }
+
+
+@pytest.mark.parametrize("case_id", sorted(THIRD_NUMBERS))
+def test_comparison_numbers(case_id: str) -> None:
+    case = next(c for c in eval_set.cases if c.id == case_id)
+    assert case.numbers[2].values[0] == pytest.approx(THIRD_NUMBERS[case_id](), abs=0.005)
 
 
 @pytest.mark.parametrize("case_id", sorted(SECOND_NUMBERS))

@@ -50,6 +50,9 @@ class RunLog(BaseModel):
     status: RunStatus = "ok"
     final_answer: str = ""
     error: str | None = None
+    # Numbers in the answer that no tool result or question backs (grounding.py):
+    # [] = every number is traceable to data; None = not checked (failed run, old log).
+    unsupported_numbers: list[str] | None = None
     steps: list[StepLog] = []
     latency_s: float = 0.0
     usage: TokenUsage = TokenUsage()

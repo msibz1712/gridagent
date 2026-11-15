@@ -237,6 +237,32 @@ COMPUTE_STATS: dict[str, Any] = {
     "strict": True,
 }
 
+COMPARE_VALUES: dict[str, Any] = {
+    "name": "compare_values",
+    "description": (
+        "Compare two numbers you got from earlier tool results, e.g. your computed market "
+        "value with the official one, this week's wind share with last week's, or two "
+        "regions. Returns a - b (difference), (a - b) / |b| in % (percent_difference), "
+        "a / b (ratio) and a + b (sum). Use it for every difference, percentage change, "
+        "ratio or total of two numbers instead of calculating yourself. Both numbers must "
+        "appear in an earlier tool result in this conversation (or in the user's "
+        "question), in the same unit; values are rejected otherwise."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "a": {"type": "number", "description": "First value (e.g. this period, ours)."},
+            "b": {"type": "number", "description": "Second value (e.g. earlier, official)."},
+            "a_label": {"type": "string", "description": "What a is, e.g. 'solar, Oct 2026'."},
+            "b_label": {"type": "string", "description": "What b is."},
+            "unit": {"type": "string", "description": "Unit of both values, e.g. 'ct/kWh'."},
+        },
+        "required": ["a", "b", "a_label", "b_label", "unit"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
 ALL_TOOLS: dict[str, dict[str, Any]] = {
     t["name"]: t
     for t in (
@@ -247,6 +273,7 @@ ALL_TOOLS: dict[str, dict[str, Any]] = {
         GET_INSTALLED_CAPACITY,
         GET_REFERENCE_STATISTICS,
         COMPUTE_STATS,
+        COMPARE_VALUES,
     )
 }
 

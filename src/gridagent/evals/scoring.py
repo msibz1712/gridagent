@@ -2,6 +2,8 @@
 
 Each check is a small, explicit rule, so a failure is easy to explain:
 - numbers:   every expected number appears in the answer (within tolerance)
+- supported: every number in the answer is backed by a tool result or the question
+             (no arithmetic of its own; see tools/grounding.py)
 - grounded:  every expected number also appears in a tool result, i.e. the agent
              fetched and computed the right data (separates "wrong data" from
              "right data, reported wrongly"; in oracle mode this tests the tools)
@@ -26,8 +28,8 @@ from pydantic import BaseModel
 
 from gridagent.agent.runlog import RunLog
 from gridagent.evals.dataset import EvalCase, ExpectedNumber, ExpectedToolCall
+from gridagent.tools.grounding import extract_numbers
 
-NUMBER = re.compile(r"(?<![\w.])[-−]?\d[\d,]*(?:\.\d+)?")
 DECLINE_PHRASES = (
     "can't",
     "cannot",
@@ -79,6 +81,7 @@ MONTHS = [
 
 class CheckResults(BaseModel):
     numbers: bool | None = None
+    supported: bool | None = None
     grounded: bool | None = None
     dates: bool | None = None
     tool_use: bool | None = None
@@ -95,22 +98,6 @@ class CheckResults(BaseModel):
 
 
 # ---------- text helpers ----------
-
-
-def extract_numbers(text: str) -> list[float]:
-    """All numbers in a text, e.g. '45,722 MW' -> 45722.0 and '-0.01' -> -0.01.
-
-    A hyphen counts as a minus sign only when not preceded by a word character,
-    so dates don't produce negative numbers.
-    """
-    numbers = []
-    for match in NUMBER.findall(text):
-        cleaned = match.replace(",", "").replace("−", "-")
-        try:
-            numbers.append(float(cleaned))
-        except ValueError:
-            continue
-    return numbers
 
 
 # Tool output is exact (rounded to 2 decimals), so grounding uses a much tighter
@@ -160,7 +147,9 @@ def _same(expected: Any, actual: Any) -> bool:
 
 
 # Refs are internal ids that depend on fetch order, so they are never compared.
-IGNORED_ARGS = {"ref", "weight_ref"}
+# compare_values inputs are free-form (order, labels, unit spelling); whether the
+# comparison was right is checked through the numbers in the answer instead.
+IGNORED_ARGS = {"ref", "weight_ref", "a", "b", "a_label", "b_label", "unit"}
 
 
 def call_matches(expected: ExpectedToolCall, actual: dict[str, Any]) -> bool:
@@ -219,5 +208,7 @@ def score(case: EvalCase, log: RunLog) -> CheckResults:
         dates_ok = all(date_mentioned(answer, d) for d in case.dates)
         mentions_ok = all(contains_any(answer, group) for group in case.mentions)
         checks.dates = dates_ok and mentions_ok
+    if log.unsupported_numbers is not None:
+        checks.supported = not log.unsupported_numbers
     checks.source = contains_any(answer, SOURCE_PHRASES)
     return checks

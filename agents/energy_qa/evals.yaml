@@ -500,7 +500,7 @@ cases:
     dates: ["2026-11-02", "2026-11-08"]
     tool_calls:
       - {name: compute_stats, args: {operation: share, source: solar}}
-    oracle_answer: "Solar produced 7.74% of Germany's public net electricity generation in the same week, 2 to 8 November 2026. Source: Energy-Charts.info (Fraunhofer ISE)"
+    oracle_answer: "Solar produced 7.75% of Germany's public net electricity generation in the same week, 2 to 8 November 2026. Source: Energy-Charts.info (Fraunhofer ISE)"
 
   - id: followup_highest_price_same_day
     category: tool_use
@@ -569,3 +569,63 @@ cases:
     question: So should I invest in wind turbines now?
     outcome: refuse
     oracle_answer: "I can't give investment advice. I can help with data on German electricity generation, prices and capacity."
+
+  # ================= Comparisons (agent 0.5.0+): differences and ratios via compare_values =================
+  # Live runs of 0.3.0/0.4.0 computed such differences in their heads ("differ by 0.06 ct/kWh").
+  - id: solar_market_value_difference_official
+    category: tool_use
+    min_version: 0.5.0
+    question: By how much did the market value of solar power in October 2026 differ from the official value?
+    outcome: answer
+    numbers:
+      - {label: our capture price ct/kWh, values: [13.449, 134.49]}
+      - {label: official ct/kWh, values: [13.39]}
+      - {label: difference ct/kWh, values: [0.059], tolerance_abs: 0.006}
+    dates: ["2026-10-01", "2026-10-31"]
+    tool_calls:
+      - {name: get_day_ahead_price, args: {start: "2026-10-01", end: "2026-10-31"}}
+      - {name: get_generation, args: {start: "2026-10-01", end: "2026-10-31"}}
+      - {name: compute_stats, args: {ref: price_1, operation: capture_price, weight_ref: gen_2, weight_source: solar}}
+      - {name: get_reference_statistics, args: {dataset: market_value_monthly, period: "2026-10"}}
+      - {name: compare_values, args: {a: 13.449, b: 13.39, a_label: "solar capture price, Energy-Charts data", b_label: "official market value (reported)", unit: ct/kWh}}
+    oracle_answer: "From 1 to 31 October 2026 the generation-weighted day-ahead price of solar power was 13.449 ct/kWh (134.49 EUR/MWh). The official monthly market value is 13.39 ct/kWh (reported by the transmission system operators), so our value is 0.059 ct/kWh (0.44%) higher; the TSOs weight by their own feed-in extrapolation. Sources: Energy-Charts.info (Fraunhofer ISE), netztransparenz.de"
+
+  - id: price_week_vs_october
+    category: tool_use
+    min_version: 0.5.0
+    question: How did the average day-ahead price last week compare with the October 2026 average?
+    outcome: answer
+    numbers:
+      - {label: mean last week, values: [256.59]}
+      - {label: mean October, values: [169.27]}
+      - {label: percent higher, values: [51.59], tolerance_abs: 0.5}
+    dates: ["2026-11-02", "2026-11-08"]
+    mentions: [["October"]]
+    tool_calls:
+      - {name: get_day_ahead_price, args: {start: "2026-11-02", end: "2026-11-08"}}
+      - {name: compute_stats, args: {operation: mean}}
+      - {name: get_day_ahead_price, args: {start: "2026-10-01", end: "2026-10-31"}}
+      - {name: compute_stats, args: {operation: mean}}
+      - {name: compare_values, args: {a: 256.59, b: 169.27, a_label: "mean, 2-8 Nov 2026", b_label: "mean, October 2026", unit: EUR/MWh}}
+    oracle_answer: "The average day-ahead price from 2 to 8 November 2026 was 256.59 EUR/MWh, 87.32 EUR/MWh or 51.59% higher than the October 2026 average of 169.27 EUR/MWh. Source: Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+
+  - id: followup_wind_solar_ratio
+    category: tool_use
+    min_version: 0.5.0
+    previous:
+      - question: What share of Germany's electricity came from wind last week?
+        tool_calls:
+          - {name: get_generation, args: {start: "2026-11-02", end: "2026-11-08"}}
+          - {name: compute_stats, args: {operation: share, source: wind}}
+        oracle_answer: "Wind produced 23.3% of Germany's public net electricity generation from 2 to 8 November 2026. Source: Energy-Charts.info (Fraunhofer ISE)"
+      - question: And solar?
+        tool_calls:
+          - {name: compute_stats, args: {operation: share, source: solar}}
+        oracle_answer: "Solar produced 7.75% of Germany's public net electricity generation in the same week, 2 to 8 November 2026. Source: Energy-Charts.info (Fraunhofer ISE)"
+    question: So how many times bigger was wind's share than solar's?
+    outcome: answer
+    numbers: [{label: ratio, values: [3.006], tolerance_abs: 0.01}]
+    dates: ["2026-11-02", "2026-11-08"]
+    tool_calls:
+      - {name: compare_values, args: {a: 23.3, b: 7.75, a_label: "wind share", b_label: "solar share", unit: "%"}}
+    oracle_answer: "From 2 to 8 November 2026 wind's share of public net generation (23.3%) was 3.006 times solar's (7.75%). Source: Energy-Charts.info (Fraunhofer ISE)"

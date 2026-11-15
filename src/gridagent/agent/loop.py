@@ -25,6 +25,7 @@ from gridagent.agent.runlog import RESULT_PREVIEW_CHARS, RunLog, StepLog, ToolCa
 from gridagent.data.provider import DataProvider
 from gridagent.llm.base import LLM, LLMError, ModelResponse
 from gridagent.llm.pricing import estimate_cost_usd
+from gridagent.tools.grounding import unsupported_numbers
 from gridagent.tools.toolbox import ToolBox
 
 REFUSAL_ANSWER = "Sorry, I can't help with that request."
@@ -101,6 +102,10 @@ class Agent:
 
         if log.status == "ok":
             conversation.turns += 1
+            tools.questions.append(question)
+            log.unsupported_numbers = unsupported_numbers(
+                log.final_answer, tools.results, tools.questions
+            )
         else:
             del messages[history_length:]  # roll back the failed turn
         log.latency_s = round(self._clock() - run_start, 3)

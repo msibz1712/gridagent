@@ -13,6 +13,7 @@ correct itself or tell the user, and the run never crashes on a tool.
 """
 
 import json
+import math
 from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any, Literal
@@ -25,6 +26,7 @@ from gridagent.data.provider import DataProvider
 from gridagent.data.reference import lookup
 from gridagent.data.sources import SOURCE_GROUPS, available_sources, source_series
 from gridagent.tools.definitions import ALL_TOOLS, CAPACITY_TECHNOLOGIES, REF_PREFIX
+from gridagent.tools.grounding import extract_numbers, is_backed
 from gridagent.tools.stats import Operation, StatsResult, capacity_factor, compute_stats, daily
 
 MAX_DAYS = 93
@@ -106,6 +108,14 @@ class StatsInput(_Input):
     weight_source: str | None = None
 
 
+class CompareInput(_Input):
+    a: float
+    b: float
+    a_label: str
+    b_label: str
+    unit: str
+
+
 class ToolInputError(Exception):
     """The model asked for something invalid; message is shown to the model."""
 
@@ -130,6 +140,10 @@ class ToolBox:
         # Successful data requests -> their summary. In a conversation the model may ask
         # for the same data again; it then gets the existing ref instead of a copy.
         self._fetched: dict[str, str] = {}
+        # Every successful result of this conversation: what numbers may be backed by
+        # (compare_values inputs, and the check of the final answer; see grounding.py).
+        self.results: list[str] = []
+        self.questions: list[str] = []
 
     def definitions(self) -> list[dict[str, Any]]:
         """Tool definitions for the API request, in a fixed order (stable for caching)."""
@@ -144,6 +158,7 @@ class ToolBox:
             "get_installed_capacity": self._get_installed_capacity,
             "get_reference_statistics": self._get_reference_statistics,
             "compute_stats": self._compute_stats,
+            "compare_values": self._compare_values,
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
@@ -156,6 +171,7 @@ class ToolBox:
             content = json.dumps(handlers[name](tool_input))
             if name in REF_PREFIX:
                 self._fetched[request_key] = content
+            self.results.append(content)
             return ToolResult(content=content)
         except ValidationError as exc:
             return ToolResult(content=f"Invalid input: {_short(exc)}", is_error=True)
@@ -245,6 +261,29 @@ class ToolBox:
         return lookup(args.dataset, args.period)
 
     # ---------- compute ----------
+
+    def _compare_values(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Difference, % difference, ratio and sum of two numbers the tools produced."""
+        args = CompareInput.model_validate(raw)
+        for name, value in (("a", args.a), ("b", args.b)):
+            written = f"{value:.10f}".rstrip("0").rstrip(".")
+            pool = [x for text in self.results + self.questions for x in extract_numbers(text)]
+            if not is_backed(value, written, pool):
+                raise ToolInputError(
+                    f"{name} = {written} does not appear in any earlier tool result or the "
+                    "question. Fetch and compute it with the tools first, then compare."
+                )
+        difference = args.a - args.b
+        return {
+            "a": {"value": args.a, "label": args.a_label},
+            "b": {"value": args.b, "label": args.b_label},
+            "unit": args.unit,
+            "difference": _round(difference),
+            "difference_unit": args.unit,
+            "percent_difference": None if args.b == 0 else _round(100 * difference / abs(args.b)),
+            "ratio": None if args.b == 0 else _round(args.a / args.b),
+            "sum": _round(args.a + args.b),
+        }
 
     def _compute_stats(self, raw: dict[str, Any]) -> dict[str, Any]:
         args = StatsInput.model_validate(raw)
@@ -371,6 +410,13 @@ def _check_source(source: str) -> None:
         raise ToolInputError(
             f"Unknown source '{source}'. Choose from: {', '.join(available_sources())}."
         )
+
+
+def _round(value: float) -> float:
+    """4 significant digits, at least 2 decimals: small differences stay visible."""
+    if value == 0:
+        return 0.0
+    return round(value, max(2, 3 - math.floor(math.log10(abs(value)))))
 
 
 def _result_dict(result: StatsResult) -> dict[str, Any]:

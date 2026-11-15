@@ -457,10 +457,11 @@ def runs(
     console.print(
         f"{s.n_runs} runs · ok {fmt(s.ok_rate, 'pct')} · errors {fmt(s.error_rate, 'pct')} · "
         f"latency p50/p95 {fmt(s.latency_p50_s, 'num')}/{fmt(s.latency_p95_s, 'num')} s · "
-        f"cost {fmt(s.total_cost_usd, 'usd')}"
+        f"cost {fmt(s.total_cost_usd, 'usd')} · "
+        f"answers with unbacked numbers {fmt(s.unsupported_rate, 'pct')}"
     )
     table = Table()
-    for column in ("time (UTC)", "status", "agent", "model", "question", "s", "cost"):
+    for column in ("time (UTC)", "status", "agent", "model", "question", "s", "cost", "unbacked"):
         table.add_column(column)
     for run in recent:
         table.add_row(
@@ -471,6 +472,9 @@ def runs(
             run.question[:60],
             f"{run.latency_s:.1f}",
             fmt(run.cost_usd, "usd"),
+            "-"
+            if run.unsupported_numbers is None
+            else ", ".join(run.unsupported_numbers) or "none",
         )
     console.print(table)
 

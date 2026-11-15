@@ -108,12 +108,15 @@ class RunSummary(BaseModel):
     latency_p50_s: float | None
     latency_p95_s: float | None
     total_cost_usd: float
+    # Share of checked answers containing a number no tool result backs (None: none checked)
+    unsupported_rate: float | None = None
 
 
 def summarize_runs(runs: list[RunLog]) -> RunSummary:
     n = len(runs)
     latencies = sorted(r.latency_s for r in runs)
     failed = sum(r.status in ("error", "timeout", "max_steps") for r in runs)
+    checked = [r for r in runs if r.unsupported_numbers is not None]
     return RunSummary(
         n_runs=n,
         ok_rate=sum(r.status == "ok" for r in runs) / n if n else None,
@@ -121,6 +124,9 @@ def summarize_runs(runs: list[RunLog]) -> RunSummary:
         latency_p50_s=percentile(latencies, 50),
         latency_p95_s=percentile(latencies, 95),
         total_cost_usd=round(sum(r.cost_usd or 0 for r in runs), 6),
+        unsupported_rate=sum(bool(r.unsupported_numbers) for r in checked) / len(checked)
+        if checked
+        else None,
     )
 
 
@@ -278,6 +284,9 @@ def method_step(call: ToolCallLog, where: str = "") -> str:
         text = _reference_step(call)
     elif call.name == "compute_stats":
         text = _stats_step(call, where)
+    elif call.name == "compare_values":
+        a, b = call.input.get("a_label", "the first value"), call.input.get("b_label", "the second")
+        text = f"Compared {a} with {b} (difference, percentage difference and ratio)"
     else:
         return _fetch_step(call)
     return text + (" (failed)" if call.is_error else "")
