@@ -27,9 +27,22 @@ CAPACITY_TECHNOLOGIES = [
 ]  # fmt: skip
 
 WEATHER_SERIES = ["wind_speed", "solar_radiation"]
+SPREAD_SERIES = ["germany", "neighbour", "spread"]
+# Neighbouring bidding zones whose prices Energy-Charts publishes under CC BY 4.0
+# (Bundesnetzagentur | SMARD.de). Other zones are "private and internal use only": not offered.
+NEIGHBOUR_ZONES = {
+    "AT": "Austria", "BE": "Belgium", "CH": "Switzerland", "CZ": "Czech Republic",
+    "DK1": "Denmark West", "DK2": "Denmark East", "FR": "France", "NL": "Netherlands",
+    "NO2": "Norway South", "PL": "Poland", "SE4": "Sweden South",
+}  # fmt: skip
 # Every name compute_stats accepts as `source`, across all kinds of refs.
 ALL_SERIES_NAMES = sorted(
-    set(available_sources()) | set(SMARD_SOURCES) | set(NEIGHBOURS) | {"sum"} | set(WEATHER_SERIES)
+    set(available_sources())
+    | set(SMARD_SOURCES)
+    | set(NEIGHBOURS)
+    | {"sum"}
+    | set(WEATHER_SERIES)
+    | set(SPREAD_SERIES)
 )
 
 DATE = {
@@ -240,6 +253,51 @@ COMPUTE_STATS: dict[str, Any] = {
     "strict": True,
 }
 
+_ZONE = {
+    "type": "string",
+    "enum": list(NEIGHBOUR_ZONES),
+    "description": "Neighbouring bidding zone: "
+    + ", ".join(f"{code} = {name}" for code, name in NEIGHBOUR_ZONES.items())
+    + ". Luxembourg shares Germany's zone (DE-LU).",
+}
+
+GET_NEIGHBOUR_PRICE: dict[str, Any] = {
+    "name": "get_neighbour_price",
+    "description": (
+        "Fetch the day-ahead price (EUR/MWh) of a neighbouring bidding zone for whole days from "
+        "`start` to `end` inclusive, published by the Bundesnetzagentur | SMARD.de via "
+        "Energy-Charts (CC BY 4.0). Returns a price `ref`: compute_stats works on it like on "
+        "Germany's price (source null). Max 93 days per call."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {"zone": _ZONE, "start": DATE, "end": DATE},
+        "required": ["zone", "start", "end"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
+GET_PRICE_SPREAD: dict[str, Any] = {
+    "name": "get_price_spread",
+    "description": (
+        "Germany's day-ahead price minus a neighbour's, interval by interval (EUR/MWh), for "
+        "whole days `start` to `end`. Returns a `ref` with series 'germany', 'neighbour' and "
+        "'spread' (= germany - neighbour: positive means Germany was more expensive, so imports "
+        "from that neighbour paid off). Use compute_stats on 'spread' (mean, count_above / "
+        "count_below with threshold 0 for hours in which Germany was dearer / cheaper) and "
+        "compute_when with 'spread' as a condition, e.g. net imports from France in hours "
+        "when Germany was more expensive. Max 93 days per call."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {"zone": _ZONE, "start": DATE, "end": DATE},
+        "required": ["zone", "start", "end"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
 GET_WEATHER: dict[str, Any] = {
     "name": "get_weather",
     "description": (
@@ -351,6 +409,8 @@ ALL_TOOLS: dict[str, dict[str, Any]] = {
         COMPARE_VALUES,
         GET_WEATHER,
         COMPUTE_WHEN,
+        GET_NEIGHBOUR_PRICE,
+        GET_PRICE_SPREAD,
     )
 }
 
@@ -361,4 +421,6 @@ REF_PREFIX = {
     "get_cross_border_flows": "flow",
     "get_regional_generation": "region",
     "get_weather": "weather",
+    "get_neighbour_price": "price",
+    "get_price_spread": "spread",
 }

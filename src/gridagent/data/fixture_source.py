@@ -38,7 +38,7 @@ class FixtureDataSource:
         return self._find("total_power", start, end)
 
     def day_ahead_price(self, start: date, end: date, bzn: str = "DE-LU") -> TimeSeriesResponse:
-        return self._find("price", start, end)
+        return self._find("price", start, end, bidding_zone=bzn)
 
     def cross_border(self, start: date, end: date, kind: str = "physical") -> TimeSeriesResponse:
         if kind not in ("physical", "trading"):
@@ -76,14 +76,19 @@ class FixtureDataSource:
 
     # ---------- helpers ----------
 
-    def _find(self, endpoint: str, start: date, end: date) -> TimeSeriesResponse:
+    def _find(
+        self, endpoint: str, start: date, end: date, bidding_zone: str | None = None
+    ) -> TimeSeriesResponse:
         if start > end:
             raise ValueError(f"start ({start}) must not be after end ({end})")
         for response in self.responses:
             if response.endpoint != endpoint or not response.data:
                 continue
+            if bidding_zone is not None and response.bidding_zone != bidding_zone:
+                continue
             first, last = response.data[0].timestamp.date(), response.data[-1].timestamp.date()
             if first <= start and end <= last:
                 rows = [r for r in response.data if start <= r.timestamp.date() <= end]
                 return response.model_copy(update={"data": rows})
-        raise NoDataError(f"No recorded {endpoint} data covering {start} to {end}.")
+        zone = f" for {bidding_zone}" if bidding_zone else ""
+        raise NoDataError(f"No recorded {endpoint} data{zone} covering {start} to {end}.")

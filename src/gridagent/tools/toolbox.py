@@ -15,18 +15,23 @@ correct itself or tell the user, and the run never crashes on a tool.
 import json
 import math
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import UTC, date, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from gridagent.data.client import EnergyChartsError, NoDataError
-from gridagent.data.models import Series, TimeSeriesResponse
+from gridagent.data.models import DataRow, Series, SeriesInfo, TimeSeriesResponse
 from gridagent.data.provider import DataProvider
 from gridagent.data.reference import lookup
 from gridagent.data.sources import SOURCE_GROUPS, available_sources, source_series
 from gridagent.tools.conditional import Condition, stats_when
-from gridagent.tools.definitions import ALL_TOOLS, CAPACITY_TECHNOLOGIES, REF_PREFIX
+from gridagent.tools.definitions import (
+    ALL_TOOLS,
+    CAPACITY_TECHNOLOGIES,
+    NEIGHBOUR_ZONES,
+    REF_PREFIX,
+)
 from gridagent.tools.grounding import extract_numbers, is_backed
 from gridagent.tools.stats import Operation, StatsResult, capacity_factor, compute_stats, daily
 
@@ -41,6 +46,7 @@ DATA_SOURCE = {
     "cbet": f"{ENERGY_CHARTS}, scheduled commercial exchanges",
     "smard": "SMARD.de (Bundesnetzagentur)",
     "weather": "Deutscher Wetterdienst (DWD), 65 stations",
+    "price_spread": f"{ENERGY_CHARTS}; prices: Bundesnetzagentur | SMARD.de",
 }
 # Installed-capacity series used for capacity factors (solar: AC = inverter capacity).
 CAPACITY_SERIES = {
@@ -132,6 +138,10 @@ class WhenInput(_Input):
     conditions: list[ConditionInput] = Field(min_length=1, max_length=3)
 
 
+class ZoneInput(PeriodInput):
+    zone: str
+
+
 class ToolInputError(Exception):
     """The model asked for something invalid; message is shown to the model."""
 
@@ -177,6 +187,8 @@ class ToolBox:
             "compare_values": self._compare_values,
             "get_weather": self._get_weather,
             "compute_when": self._compute_when,
+            "get_neighbour_price": self._get_neighbour_price,
+            "get_price_spread": self._get_price_spread,
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
@@ -279,6 +291,53 @@ class ToolBox:
         return lookup(args.dataset, args.period)
 
     # ---------- compute ----------
+
+    def _zone_prices(self, args: ZoneInput) -> TimeSeriesResponse:
+        if args.zone not in NEIGHBOUR_ZONES:
+            raise ToolInputError(f"Zone must be one of: {', '.join(NEIGHBOUR_ZONES)}.")
+        self._check_period(args.start, args.end, latest=self.today() + timedelta(days=1))
+        response = self.data.day_ahead_price(args.start, args.end, bzn=args.zone)
+        if response.bidding_zone != args.zone:  # never let one zone's prices pose as another's
+            raise ToolInputError(f"Expected {args.zone} prices, got {response.bidding_zone}.")
+        return response
+
+    def _get_neighbour_price(self, raw: dict[str, Any]) -> dict[str, Any]:
+        args = ZoneInput.model_validate(raw)
+        response = self._zone_prices(args)
+        ref = self._save("get_neighbour_price", response)
+        return self._summary(ref, response, args.start, args.end) | {
+            "zone": f"{args.zone} ({NEIGHBOUR_ZONES[args.zone]})"
+        }
+
+    def _get_price_spread(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Germany minus neighbour on the timestamps both zones have (same resolution)."""
+        args = ZoneInput.model_validate(raw)
+        neighbour = self._zone_prices(args)
+        germany = self.data.day_ahead_price(args.start, args.end)
+        theirs = {row.timestamp.astimezone(UTC): row.values.get("day_ahead_price")
+                  for row in neighbour.data}  # fmt: skip
+        rows = []
+        for row in germany.data:
+            ours = row.values.get("day_ahead_price")
+            other = theirs.get(row.timestamp.astimezone(UTC))
+            spread = None if ours is None or other is None else round(ours - other, 2)
+            values = {"germany": ours, "neighbour": other, "spread": spread}
+            rows.append(DataRow(timestamp=row.timestamp, values=values))
+        response = germany.model_copy(update={
+            "endpoint": "price_spread",
+            "attributes": {"zone": f"{args.zone} ({NEIGHBOUR_ZONES[args.zone]})",
+                           "sign_convention": "spread = Germany minus neighbour"},
+            "series": [SeriesInfo(id="germany", name="Germany (DE-LU) price", unit="EUR / MWh"),
+                       SeriesInfo(id="neighbour", name=f"{args.zone} price", unit="EUR / MWh"),
+                       SeriesInfo(id="spread", name="Germany minus neighbour", unit="EUR / MWh")],
+            "data": rows,
+        })  # fmt: skip
+        ref = self._save("get_price_spread", response)
+        return self._summary(ref, response, args.start, args.end) | {
+            "zone": response.attributes["zone"],
+            "series": ["germany", "neighbour", "spread"],
+            "sign_convention": "spread = Germany minus neighbour; positive = Germany dearer",
+        }
 
     def _get_weather(self, raw: dict[str, Any]) -> dict[str, Any]:
         args = PeriodInput.model_validate(raw)

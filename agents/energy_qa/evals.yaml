@@ -700,3 +700,56 @@ cases:
     # No tool call required: the tool description says data ends yesterday, and the live
     # model (correctly) answered without trying today. Asking for it would test the wrong thing.
     oracle_answer: "The DWD weather observations I use are only available up to yesterday, so today's wind is not yet available. I can tell you how windy it was yesterday or last week instead."
+
+  # ================= Neighbouring markets (agent 0.7.0+): neighbour prices and spreads =================
+  - id: price_germany_vs_france_last_week
+    category: tool_use
+    min_version: 0.7.0
+    question: Was electricity cheaper in France or in Germany last week?
+    outcome: answer
+    numbers:
+      - {label: France mean price, values: [255.83]}
+      - {label: Germany mean price, values: [256.59]}
+    dates: ["2026-11-02", "2026-11-08"]
+    tool_calls:
+      - {name: get_price_spread, args: {zone: FR, start: "2026-11-02", end: "2026-11-08"}}
+      - {name: compute_stats, args: {operation: mean, source: neighbour}}
+      - {name: compute_stats, args: {operation: mean, source: germany}}
+    oracle_answer: "From 2 to 8 November 2026 the day-ahead price averaged 255.83 EUR/MWh in France and 256.59 EUR/MWh in Germany (DE-LU), so France was marginally cheaper. Sources: Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+
+  - id: hours_france_cheaper_last_week
+    category: tool_use
+    min_version: 0.7.0
+    question: In how many hours last week was power cheaper in France than in Germany?
+    outcome: answer
+    numbers: [{label: hours, values: [39.5], tolerance_abs: 0.01}]
+    dates: ["2026-11-02", "2026-11-08"]
+    tool_calls:
+      - {name: get_price_spread, args: {zone: FR, start: "2026-11-02", end: "2026-11-08"}}
+      - {name: compute_stats, args: {operation: count_above, source: spread, threshold: 0}}
+    oracle_answer: "From 2 to 8 November 2026 the day-ahead price was lower in France than in Germany for 39.5 hours (counted from 15-minute prices, spread Germany minus France above 0). Sources: Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+
+  - id: followup_commercial_imports_from_france
+    category: tool_use
+    min_version: 0.7.0
+    previous:
+      - question: In how many hours last week was power cheaper in France than in Germany?
+        tool_calls:
+          - {name: get_price_spread, args: {zone: FR, start: "2026-11-02", end: "2026-11-08"}}
+          - {name: compute_stats, args: {operation: count_above, source: spread, threshold: 0}}
+        oracle_answer: "From 2 to 8 November 2026 France was cheaper than Germany for 39.5 hours (15-minute prices). Sources: Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+    question: How much did Germany import from France in those hours, according to the scheduled commercial exchanges?
+    outcome: answer
+    numbers: [{label: net commercial imports GWh, values: [91.22]}]
+    dates: ["2026-11-02", "2026-11-08"]
+    tool_calls:
+      - {name: get_cross_border_flows, args: {start: "2026-11-02", end: "2026-11-08", kind: trading}}
+      - {name: compute_when, args: {operation: energy, ref: flow_2, source: france, conditions: [{ref: spread_1, source: spread, below: null, above: 0}]}}
+    oracle_answer: "In the 47 hours from 2 to 8 November 2026 in which Germany's hourly average price was above France's, Germany's net scheduled commercial imports from France were 91.22 GWh (hourly averages, so the hour count differs slightly from the 15-minute count). Sources: Energy-Charts.info (Fraunhofer ISE); Bundesnetzagentur | SMARD.de"
+
+  - id: price_not_licensed_zone
+    category: missing_data
+    min_version: 0.7.0
+    question: What was the average day-ahead price in Spain last week?
+    outcome: refuse_or_no_data
+    oracle_answer: "Day-ahead prices for Spain are not available to me: I can only compare Germany with its neighbouring bidding zones whose prices are openly licensed (Austria, Belgium, Switzerland, Czech Republic, Denmark, France, the Netherlands, Norway South, Poland and Sweden South)."

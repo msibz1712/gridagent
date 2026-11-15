@@ -70,6 +70,8 @@ class DatabaseDataSource:
         return self._read("total_power", start, end)
 
     def day_ahead_price(self, start: date, end: date, bzn: str = "DE-LU") -> TimeSeriesResponse:
+        if bzn != "DE-LU":  # only Germany's prices are synced; never return them for another zone
+            raise NotInDatabase(f"prices for {bzn} are not stored")
         return self._read("day_ahead_price", start, end)
 
     def cross_border(self, start: date, end: date, kind: str = "physical") -> TimeSeriesResponse:
@@ -122,7 +124,7 @@ class HybridDataSource:
         return self._either("total_power", start, end)
 
     def day_ahead_price(self, start: date, end: date, bzn: str = "DE-LU") -> TimeSeriesResponse:
-        return self._either("day_ahead_price", start, end)
+        return self._either("day_ahead_price", start, end, bzn=bzn)
 
     def cross_border(self, start: date, end: date, kind: str = "physical") -> TimeSeriesResponse:
         return self._either("cross_border", start, end, kind=kind)

@@ -27,6 +27,24 @@ CALM, WINDY = [("wind_speed", 3, None)], [("wind_speed", None, 5)]
 DARK_CALM = [("wind_speed", 3, None), ("solar_radiation", 50, None)]
 
 
+PRICE_FR_WEEK = ic.rows("price_FR_2026-11-02_2026-11-08.json")
+
+
+def _france_cheaper_quarter_hours() -> float:
+    pairs = zip(PRICE_WEEK, PRICE_FR_WEEK, strict=True)
+    return sum(de["values"][P] > fr["values"][P] for de, fr in pairs) * 0.25
+
+
+def _commercial_imports_when_germany_dearer() -> float:
+    de, fr = (
+        ic.hourly(PRICE_WEEK, lambda r: r["values"][P]),
+        ic.hourly(PRICE_FR_WEEK, lambda r: r["values"][P]),
+    )
+    flows = ic.hourly(ic.rows("cbet_de_2026-11-02_2026-11-08.json"),
+                      lambda r: r["values"]["france"])  # fmt: skip
+    return sum(flows[h] for h in de if de[h] - fr[h] > 0)  # GW x 1 h = GWh
+
+
 def _hourly_price_october() -> dict[str, float]:
     return ic.hourly(PRICE_OCT, lambda r: r["values"][P])
 
@@ -110,6 +128,10 @@ INDEPENDENT = {
     "followup_gas_in_dunkelflaute": lambda: ic.mean_when(
         ic.hourly(GEN_OCT, lambda r: r["values"]["fossil_gas"]), ic.hours_where(W_OCT, DARK_CALM)
     ),
+    # ---- Neighbouring markets (0.7.0) ----
+    "price_germany_vs_france_last_week": lambda: ic.mean(PRICE_FR_WEEK, P),
+    "hours_france_cheaper_last_week": _france_cheaper_quarter_hours,
+    "followup_commercial_imports_from_france": _commercial_imports_when_germany_dearer,
     # Published figures: checked against the curated reference file instead.
     "co2_factor_2025": lambda: _reference("co2_intensity_electricity_mix", "2025"),
     "official_renewable_share_2025": lambda: _reference("renewable_share_gross_generation", "2025"),
@@ -156,6 +178,7 @@ SECOND_NUMBERS = {
     "price_calm_vs_windy_october": lambda: ic.mean_when(
         _hourly_price_october(), ic.hours_where(W_OCT, WINDY)
     ),
+    "price_germany_vs_france_last_week": lambda: ic.mean(PRICE_WEEK, P),
 }
 
 

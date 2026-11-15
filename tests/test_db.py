@@ -346,3 +346,19 @@ def test_disk_cache_serves_repeats_and_refreshes_after_a_resync(synced_url: str,
 
     with pytest.raises(NotInDatabase):  # coverage is still checked before the cache
         db.public_power(date(2026, 11, 9), date(2026, 11, 10))
+
+
+def test_other_bidding_zones_never_get_germanys_prices(synced_url: str) -> None:
+    """Only DE-LU is stored: a French request must go to the live source, with the zone."""
+    asked = []
+
+    class Live:
+        def day_ahead_price(self, start, end, bzn="DE-LU"):
+            asked.append(bzn)
+            return fixtures.day_ahead_price(start, end)
+
+    with pytest.raises(NotInDatabase):
+        DatabaseDataSource(synced_url).day_ahead_price(*WEEK, bzn="FR")
+    hybrid = HybridDataSource(DatabaseDataSource(synced_url), live=Live())
+    hybrid.day_ahead_price(*WEEK, bzn="FR")
+    assert asked == ["FR"] and hybrid.last_served_from == "live"

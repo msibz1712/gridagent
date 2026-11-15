@@ -28,7 +28,7 @@ from gridagent.data.models import Series
 from gridagent.data.provider import DataProvider, LiveDataSource
 from gridagent.evals.runner import percentile
 from gridagent.llm.claude import ClaudeLLM
-from gridagent.tools.definitions import REF_PREFIX
+from gridagent.tools.definitions import NEIGHBOUR_ZONES, REF_PREFIX
 from gridagent.tools.toolbox import ToolBox, ToolInputError
 
 
@@ -243,6 +243,13 @@ def _fetch_step(call: ToolCallLog) -> str:
         )
     elif call.name == "get_day_ahead_price":
         what = "day-ahead electricity prices (Germany–Luxembourg)"
+    elif call.name in ("get_neighbour_price", "get_price_spread"):
+        zone = NEIGHBOUR_ZONES.get(args.get("zone", ""), args.get("zone", "a neighbour"))
+        what = (f"day-ahead electricity prices for {zone}" if call.name == "get_neighbour_price"
+                else f"the day-ahead price difference between Germany and {zone}")  # fmt: skip
+        if call.is_error:
+            return f"Looked for {what} for {period}: no data available"
+        return f"Retrieved {what} for {period}"
     elif call.name == "get_weather":
         what = "hourly wind speed and solar radiation for Germany (65 DWD stations)"
         if call.is_error:
@@ -365,7 +372,7 @@ def sources_for_run(log: RunLog) -> list[dict[str, str]]:
     sources = []
     if names & {"get_generation", "get_cross_border_flows", "get_installed_capacity"}:
         sources.append(GENERATION_SOURCE)
-    if "get_day_ahead_price" in names:
+    if names & {"get_day_ahead_price", "get_neighbour_price", "get_price_spread"}:
         sources.append(PRICE_SOURCE)
     if "get_regional_generation" in names:
         sources.append(SMARD_SOURCE)
@@ -420,15 +427,23 @@ def bucket_size(series: Series, max_points: int = MAX_CHART_POINTS) -> int:
     return max(1, math.ceil(len(series.points) / max_points))
 
 
-def _chart_title(response_endpoint: str, source: str, region: str | None) -> str:
+def _chart_title(
+    response_endpoint: str, source: str, region: str | None, zone: str | None = None
+) -> str:
     if response_endpoint == "price":
-        return "Day-ahead electricity price, Germany–Luxembourg"
+        name = "Germany–Luxembourg" if zone in (None, "DE-LU") else NEIGHBOUR_ZONES.get(zone, zone)
+        return f"Day-ahead electricity price, {name}"
+    if response_endpoint == "price_spread":
+        titles = {
+            "germany": "Day-ahead price, Germany",
+            "neighbour": "Day-ahead price, neighbour",
+            "spread": "Price difference: Germany minus neighbour",
+        }
+        return titles.get(source, source)
     if response_endpoint == "weather":
-        return (
-            "Mean wind speed, Germany (DWD, ~10 m)"
-            if source == "wind_speed"
-            else ("Mean solar radiation, Germany (DWD)")
-        )
+        if source == "wind_speed":
+            return "Mean wind speed, Germany (DWD, ~10 m)"
+        return "Mean solar radiation, Germany (DWD)"
     if response_endpoint in ("cbpf", "cbet"):
         kind = "physical" if response_endpoint == "cbpf" else "commercial"
         return f"Net {kind} imports: {source_label(source)} (negative = export)"
@@ -485,7 +500,10 @@ def charts_for_run(log: RunLog, data: DataProvider, toolbox: ToolBox | None = No
         charts.append(
             Chart(
                 title=_chart_title(
-                    response.endpoint, source or "", response.attributes.get("region")
+                    response.endpoint,
+                    source or "",
+                    response.attributes.get("region"),
+                    response.bidding_zone,
                 ),
                 unit=series.unit,
                 period=format_period(series.start.isoformat(), series.end.isoformat()),
