@@ -10,6 +10,7 @@ required and use `null` for "not given", which keeps the schemas simple.
 
 from typing import Any
 
+from gridagent.data.netztransparenz import SERIES_NAMES as REDISPATCH_SERIES
 from gridagent.data.reference import load_reference_data
 from gridagent.data.smard import FILTERS as SMARD_SOURCES
 from gridagent.data.smard import REGIONS
@@ -43,6 +44,7 @@ ALL_SERIES_NAMES = sorted(
     | {"sum"}
     | set(WEATHER_SERIES)
     | set(SPREAD_SERIES)
+    | set(REDISPATCH_SERIES)
 )
 
 DATE = {
@@ -298,6 +300,31 @@ GET_PRICE_SPREAD: dict[str, Any] = {
     "strict": True,
 }
 
+GET_REDISPATCH: dict[str, Any] = {
+    "name": "get_redispatch",
+    "description": (
+        "Congestion management (redispatch and countertrading) ordered by the four German "
+        "TSOs, from netztransparenz.de, for whole days `start` to `end` (up to yesterday). "
+        "Returns `summary` (number of measures; energy in MWh by direction and primary energy "
+        "type, by category, and reductions by instructing TSO; computed from each measure's "
+        "stated energy within the period) and a `ref` with 15-minute series in MW: "
+        "reduce_total, increase_total, reduce_renewable (curtailed renewables), "
+        "reduce_conventional, increase_conventional, increase_other (mostly power bought on "
+        "the exchange). Use the ref with compute_stats (energy, max, ...) and compute_when "
+        "(e.g. renewable curtailment in windy hours). The series spread each measure's energy "
+        "evenly over its window (the exact profile is not published): say so for hourly "
+        "results. Plant test runs are excluded from the series and listed separately. "
+        "Max 93 days per call."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {"start": DATE, "end": DATE},
+        "required": ["start", "end"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
 GET_WEATHER: dict[str, Any] = {
     "name": "get_weather",
     "description": (
@@ -414,6 +441,7 @@ ALL_TOOLS: dict[str, dict[str, Any]] = {
         COMPUTE_WHEN,
         GET_NEIGHBOUR_PRICE,
         GET_PRICE_SPREAD,
+        GET_REDISPATCH,
     )
 }
 
@@ -426,4 +454,5 @@ REF_PREFIX = {
     "get_weather": "weather",
     "get_neighbour_price": "price",
     "get_price_spread": "spread",
+    "get_redispatch": "redispatch",
 }

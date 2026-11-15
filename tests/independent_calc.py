@@ -134,3 +134,44 @@ def hours_where(weather: str, rules: list[tuple[str, float | None, float | None]
 def mean_when(target: dict[str, float], hours: set[str]) -> float:
     picked = [target[h] for h in hours if h in target]
     return sum(picked) / len(picked)
+
+
+# ---- redispatch (0.8.0), on the SYNTHETIC fixture; written out again on purpose ----
+
+
+def redispatch_rows() -> list[dict]:
+    import csv
+
+    text = (FIXTURES / "ntp" / "redispatch_synthetic.csv").read_text()
+    return list(csv.DictReader(text.splitlines(), delimiter=";"))
+
+
+def _utc_span(row: dict):
+    from datetime import UTC, datetime
+
+    def at(day: str, clock: str) -> datetime:
+        return datetime.strptime(f"{day} {clock}", "%d.%m.%Y %H:%M").replace(tzinfo=UTC)
+
+    return at(row["BEGINN_DATUM"], row["BEGINN_UHRZEIT"]), at(
+        row["ENDE_DATUM"], row["ENDE_UHRZEIT"]
+    )
+
+
+def redispatch_mwh(rows, lower, upper, direction: str, energy_type: str | None = None,
+                   tso: str | None = None) -> float:  # fmt: skip
+    """Stated MWh inside [lower, upper), spread evenly; test runs excluded."""
+    total = 0.0
+    for r in rows:
+        if "Probefahrt" in r["GRUND_DER_MASSNAHME"] or direction not in r["RICHTUNG"]:
+            continue
+        if energy_type and r["PRIMAERENERGIEART"] != energy_type:
+            continue
+        if tso and r["ANWEISENDER_UENB"] != tso:
+            continue
+        start, end = _utc_span(r)
+        share = (
+            max((min(end, upper) - max(start, lower)).total_seconds(), 0)
+            / (end - start).total_seconds()
+        )
+        total += float(r["GESAMTE_ARBEIT_MWH"].replace(",", ".")) * share
+    return total

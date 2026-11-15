@@ -4,6 +4,7 @@ If someone edits evals.yaml, or a fixture changes, this fails, so expected
 answers can't silently drift from the data.
 """
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,21 @@ def _commercial_imports_when_germany_dearer() -> float:
     flows = ic.hourly(ic.rows("cbet_de_2026-11-02_2026-11-08.json"),
                       lambda r: r["values"]["france"])  # fmt: skip
     return sum(flows[h] for h in de if de[h] - fr[h] > 0)  # GW x 1 h = GWh
+
+
+_RD_LOWER = datetime(2026, 11, 1, 23, tzinfo=UTC)  # 2 Nov 00:00 in Berlin
+_RD_UPPER = datetime(2026, 11, 8, 23, tzinfo=UTC)
+
+
+def _curtailment_in_windy_hours() -> float:
+    rows = ic.redispatch_rows()
+    total = 0.0
+    for hour in ic.hours_where(W_WEEK, [("wind_speed", None, 4)]):
+        start = datetime.strptime(hour, "%Y-%m-%dT%H").replace(tzinfo=UTC)
+        total += ic.redispatch_mwh(
+            rows, start, start + timedelta(hours=1), "reduzieren", "Erneuerbar"
+        )
+    return total
 
 
 def _hourly_price_october() -> dict[str, float]:
@@ -132,6 +148,14 @@ INDEPENDENT = {
     "price_germany_vs_france_last_week": lambda: ic.mean(PRICE_FR_WEEK, P),
     "hours_france_cheaper_last_week": _france_cheaper_quarter_hours,
     "followup_commercial_imports_from_france": _commercial_imports_when_germany_dearer,
+    # ---- Congestion management (0.8.0), SYNTHETIC redispatch fixture ----
+    "renewable_curtailment_last_week": lambda: ic.redispatch_mwh(
+        ic.redispatch_rows(), _RD_LOWER, _RD_UPPER, "reduzieren", "Erneuerbar"
+    ),
+    "redispatch_by_operator_last_week": lambda: ic.redispatch_mwh(
+        ic.redispatch_rows(), _RD_LOWER, _RD_UPPER, "reduzieren", tso="TenneT DE"
+    ),
+    "curtailment_in_windy_hours": _curtailment_in_windy_hours,
     # Published figures: checked against the curated reference file instead.
     "co2_factor_2025": lambda: _reference("co2_intensity_electricity_mix", "2025"),
     "official_renewable_share_2025": lambda: _reference("renewable_share_gross_generation", "2025"),
@@ -149,7 +173,7 @@ def test_eval_set_size_and_coverage() -> None:
     core = [c for c in eval_set.cases if c.min_version is None]
     assert any(c.previous for c in eval_set.cases)  # conversations are covered
     assert 20 <= len(core) <= 30
-    assert len(eval_set.cases) <= 60  # kept small: every live run costs money
+    assert len(eval_set.cases) <= 65  # kept small: every live run costs money
     categories = {c.category for c in eval_set.cases}
     assert {"factual", "tool_use", "ambiguous", "missing_data", "future", "refusal"} <= categories
 

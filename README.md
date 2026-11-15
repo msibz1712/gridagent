@@ -21,9 +21,9 @@ memory or mental arithmetic, and that is checked automatically on every answer.
 *(Unedited answer from a live evaluation run of agent 0.7.0 on Claude Haiku 5.5: it fetched
 prices and weather, ran four conditional calculations and one comparison, all in code.)*
 
-**At a glance:** 12 tools · 59-question eval set · **98.3%** live pass rate · **100%**
+**At a glance:** 13 tools · 62-question eval set · **98.3%** live pass rate · **100%**
 of refusals and missing-data cases handled correctly · about **$0.001 and 7 s per
-question** · 403 tests · CI with free replay of real model answers · Docker · PostgreSQL
+question** · 417 tests · CI with free replay of real model answers · Docker · PostgreSQL
 (Supabase) with 1.5 million rows since 2018.
 
 ---
@@ -51,6 +51,7 @@ preventing exactly that.
 | Regions | "How much solar did the TenneT control area produce?" | SMARD control-area data |
 | Capacity | "What was the onshore wind capacity factor in October?" | Energy-Charts installed capacity |
 | Weather and its effects | "How many hours had neither wind nor sun, and how much gas ran then?" | DWD station observations (65 stations) |
+| Grid congestion | "How much renewable power was curtailed by redispatch, and in which hours?" | netztransparenz.de (TSOs' redispatch measures; own account, see licences) |
 | Official statistics | "What was the official renewable share in 2025?" | UBA, BDEW / AGEB (curated, with status: final, preliminary, reported) |
 
 It declines what it should not do: forecasts, investment or trading advice, other
@@ -62,9 +63,9 @@ before?", "How does that compare with solar?") build on the conversation.
 ```mermaid
 flowchart LR
     Q[Question] --> M["Claude (Haiku 5.5)<br/>decides which data<br/>and which calculation"]
-    M -- tool calls --> T["12 tools<br/>(fetch · compute · compare)"]
+    M -- tool calls --> T["13 tools<br/>(fetch · compute · compare)"]
     T --> D[("Supabase / PostgreSQL<br/>history since 2018")]
-    T --> L["Live APIs<br/>Energy-Charts · SMARD · DWD"]
+    T --> L["Live APIs<br/>Energy-Charts · SMARD · DWD<br/>netztransparenz (OAuth)"]
     D -. not synced or unreachable .-> L
     T -- "small results + refs" --> M
     M --> A["Answer with definitions,<br/>period and sources"]
@@ -138,10 +139,19 @@ model ran, so it cost nothing; a schema test and a one-question smoke test now c
 | [Energy-Charts](https://energy-charts.info) (Fraunhofer ISE) | generation, load, flows, capacity | CC BY 4.0 |
 | [SMARD](https://www.smard.de) (Bundesnetzagentur) | day-ahead prices (DE-LU and 11 neighbouring zones), control areas | CC BY 4.0 |
 | [DWD open data](https://opendata.dwd.de) | 10-minute wind and solar radiation, 65 stations | CC BY 4.0 |
+| [netztransparenz.de](https://www.netztransparenz.de) (the four TSOs) | redispatch and countertrading measures | © TSOs: not openly licensed (see below) |
 | UBA, BDEW / AGEB, netztransparenz | official statistics (curated file with source, date and status) | cited |
 
 Only openly licensed price zones are offered; Energy-Charts marks other zones as
 internal-use only.
+
+**Redispatch data and its licence.** netztransparenz.de content is copyright-protected;
+reproducing it needs the TSOs' prior written consent. So GridAgent fetches it with the
+user's own free API account (OAuth 2.0 client credentials, `NTP_CLIENT_ID` /
+`NTP_CLIENT_SECRET`), uses it for the account holder's own analysis, returns only
+aggregates, and never commits real measures: tests and evals use a clearly labelled
+**synthetic** file in the documented format, and a test fails if anything else appears
+there. Publishing real measures would need the TSOs' permission.
 
 ## Quick start
 
@@ -210,7 +220,7 @@ src/gridagent/data/      API clients (Energy-Charts, SMARD, DWD), caching, recor
 src/gridagent/db/        PostgreSQL schema, sync, database and hybrid data sources
 src/gridagent/evals/     eval set, oracle/replay/live runner, scoring, reports
 src/gridagent/web/       FastAPI backend and the static website
-tests/                   403 tests; independent reference calculations; recorded API data
+tests/                   417 tests; independent reference calculations; recorded API data
 ```
 
 ## Limits and responsible use
@@ -229,8 +239,6 @@ tests/                   403 tests; independent reference calculations; recorded
 
 ## Next steps
 
-- Grid congestion and redispatch (curtailed wind, costs): the largest open topic in the
-  German grid.
 - Weather per control area, and climate context against the 1991–2020 normal.
 - A nightly sync job (GitHub Actions) to keep the database current.
 

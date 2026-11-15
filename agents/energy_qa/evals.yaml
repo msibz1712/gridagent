@@ -753,3 +753,42 @@ cases:
     question: What was the average day-ahead price in Spain last week?
     outcome: refuse_or_no_data
     oracle_answer: "Day-ahead prices for Spain are not available to me: I can only compare Germany with its neighbouring bidding zones whose prices are openly licensed (Austria, Belgium, Switzerland, Czech Republic, Denmark, France, the Netherlands, Norway South, Poland and Sweden South)."
+
+  # ================= Congestion management (agent 0.8.0+) =================
+  # SYNTHETIC redispatch data (tests/fixtures/ntp): netztransparenz.de data may not be
+  # republished, so these cases test the mechanics, not real-world figures.
+  - id: renewable_curtailment_last_week
+    category: factual
+    min_version: 0.8.0
+    question: How much renewable generation was curtailed by redispatch last week?
+    outcome: answer
+    numbers: [{label: renewable curtailment MWh, values: [1724, 1.72]}]
+    dates: ["2026-11-02", "2026-11-08"]
+    tool_calls:
+      - {name: get_redispatch, args: {start: "2026-11-02", end: "2026-11-08"}}
+    oracle_answer: "From 2 to 8 November 2026 the transmission system operators curtailed 1724 MWh of renewable generation through redispatch (congestion management; plant test runs excluded). Source: netztransparenz.de (German TSOs)"
+
+  - id: redispatch_by_operator_last_week
+    category: factual
+    min_version: 0.8.0
+    question: Which transmission system operator ordered the most redispatch reductions last week?
+    outcome: answer
+    numbers: [{label: TenneT reductions MWh, values: [1604, 1.6]}]
+    dates: ["2026-11-02", "2026-11-08"]
+    mentions: [["TenneT"]]
+    tool_calls:
+      - {name: get_redispatch, args: {start: "2026-11-02", end: "2026-11-08"}}
+    oracle_answer: "From 2 to 8 November 2026 TenneT DE ordered the most redispatch reductions, 1604 MWh, ahead of Amprion (920 MWh) and 50Hertz (360 MWh). Source: netztransparenz.de (German TSOs)"
+
+  - id: curtailment_in_windy_hours
+    category: tool_use
+    min_version: 0.8.0
+    question: How much of last week's renewable curtailment happened in hours with wind above 4 m/s?
+    outcome: answer
+    numbers: [{label: curtailment in windy hours MWh, values: [1204, 1.2]}]
+    dates: ["2026-11-02", "2026-11-08"]
+    tool_calls:
+      - {name: get_redispatch, args: {start: "2026-11-02", end: "2026-11-08"}}
+      - {name: get_weather, args: {start: "2026-11-02", end: "2026-11-08"}}
+      - {name: compute_when, args: {operation: energy, ref: redispatch_1, source: reduce_renewable, conditions: [{ref: weather_2, source: wind_speed, below: null, above: 4}]}}
+    oracle_answer: "From 2 to 8 November 2026, 1204 MWh of renewable curtailment fell into the 43 hours in which the DWD station mean wind speed was above 4 m/s (hourly values; each redispatch measure's energy is spread evenly over its duration, so this is approximate). Sources: netztransparenz.de (German TSOs); Deutscher Wetterdienst (DWD)"

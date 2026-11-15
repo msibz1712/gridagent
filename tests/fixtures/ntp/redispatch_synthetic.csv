@@ -1,0 +1,12 @@
+BEGINN_DATUM;BEGINN_UHRZEIT;ZEITZONE_VON;ENDE_DATUM;ENDE_UHRZEIT;ZEITZONE_BIS;GRUND_DER_MASSNAHME;RICHTUNG;MITTLERE_LEISTUNG_MW;MAXIMALE_LEISTUNG_MW;GESAMTE_ARBEIT_MWH;ANWEISENDER_UENB;ANFORDERNDER_UENB;BETROFFENE_ANLAGE;PRIMAERENERGIEART
+01.11.2026;21:00;UTC;02.11.2026;03:00;UTC;Strombedingter Redispatch;Wirkleistungseinspeisung reduzieren;100;100;600;TenneT DE;TenneT DE;Wind cluster N1;Erneuerbar
+01.11.2026;21:00;UTC;02.11.2026;03:00;UTC;Strombedingter Redispatch;Wirkleistungseinspeisung erhöhen;100;100;600;TenneT DE;TenneT DE;Plant S1;Konventionell
+02.11.2026;10:00;UTC;02.11.2026;14:00;UTC;Strombedingter Redispatch;Wirkleistungseinspeisung reduzieren;250;300;800;Amprion;Amprion;Plant A;Konventionell
+02.11.2026;10:00;UTC;02.11.2026;14:00;UTC;Strombedingter Redispatch;Wirkleistungseinspeisung erhöhen;200;200;800;Amprion;Amprion;Börse;Sonstiges
+03.11.2026;06:00;UTC;03.11.2026;12:00;UTC;Probefahrt;Wirkleistungseinspeisung erhöhen;50;50;300;TransnetBW;TransnetBW;Plant T1;Konventionell
+04.11.2026;00:00;UTC;04.11.2026;08:00;UTC;Strombedingter Redispatch;Wirkleistungseinspeisung reduzieren;150,5;200;1204;TenneT DE;TenneT DE;Wind cluster N2;Erneuerbar
+04.11.2026;00:00;UTC;04.11.2026;08:00;UTC;Strombedingter Redispatch;Wirkleistungseinspeisung erhöhen;150,5;200;1204;TenneT DE;TenneT DE;Plant S2;Konventionell
+05.11.2026;16:00;UTC;05.11.2026;20:00;UTC;Strombedingter Countertrade DE-DK1;Wirkleistungseinspeisung erhöhen;75;75;300;TenneT DE;TenneT DE;Börse;Sonstiges
+06.11.2026;12:00;UTC;06.11.2026;18:00;UTC;Strom- und Spannungsbedingter RD;Wirkleistungseinspeisung reduzieren;80;120;360;50Hertz;50Hertz;Plant E1;Konventionell
+06.11.2026;12:00;UTC;06.11.2026;18:00;UTC;Strom- und Spannungsbedingter RD;Wirkleistungseinspeisung erhöhen;60;60;360;50Hertz;50Hertz;Plant E2;Konventionell
+08.11.2026;20:00;UTC;09.11.2026;02:00;UTC;Strombedingter Redispatch;Wirkleistungseinspeisung reduzieren;40;40;240;Amprion;TenneT DE;Wind cluster N3;Erneuerbar

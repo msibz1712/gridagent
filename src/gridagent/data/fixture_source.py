@@ -13,6 +13,7 @@ from pathlib import Path
 
 from gridagent.data.client import NoDataError
 from gridagent.data.models import TimeSeriesResponse
+from gridagent.data.netztransparenz import Measure, day_bounds_utc, parse_measures
 from gridagent.data.provider import DataProvider
 from gridagent.data.smard import SmardClient
 
@@ -28,6 +29,7 @@ class FixtureDataSource:
             for path in sorted(directory.glob("*.json"))
         ]
         self.smard = SmardClient(get_json=self._smard_file(directory / "smard"))
+        self.directory = directory
 
     # ---------- Energy-Charts ----------
 
@@ -56,6 +58,19 @@ class FixtureDataSource:
 
     def weather(self, start: date, end: date) -> TimeSeriesResponse:
         return self._find("weather", start, end)
+
+    def redispatch(self, start: date, end: date) -> list[Measure]:
+        """SYNTHETIC measures (see fixtures/ntp/README.md): real data may not be committed."""
+        file = self.directory / "ntp" / "redispatch_synthetic.csv"
+        lower, upper = day_bounds_utc(start, end)
+        if not file.is_file():
+            raise NoDataError("No recorded redispatch data.")
+        measures = [
+            m for m in parse_measures(file.read_text()) if m.start < upper and m.end > lower
+        ]
+        if not measures:
+            raise NoDataError(f"No recorded redispatch data from {start} to {end}.")
+        return measures
 
     # ---------- SMARD ----------
 

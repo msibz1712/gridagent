@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from gridagent.data.client import EnergyChartsError, NoDataError
 from gridagent.data.models import DataRow, Series, SeriesInfo, TimeSeriesResponse
+from gridagent.data.netztransparenz import SERIES_NAMES, summarize, to_series
 from gridagent.data.provider import DataProvider
 from gridagent.data.reference import lookup
 from gridagent.data.sources import SOURCE_GROUPS, available_sources, source_series
@@ -47,6 +48,7 @@ DATA_SOURCE = {
     "smard": "SMARD.de (Bundesnetzagentur)",
     "weather": "Deutscher Wetterdienst (DWD), 65 stations",
     "price_spread": f"{ENERGY_CHARTS}; prices: Bundesnetzagentur | SMARD.de",
+    "redispatch": "netztransparenz.de (the four German TSOs)",
 }
 # Installed-capacity series used for capacity factors (solar: AC = inverter capacity).
 CAPACITY_SERIES = {
@@ -189,6 +191,7 @@ class ToolBox:
             "compute_when": self._compute_when,
             "get_neighbour_price": self._get_neighbour_price,
             "get_price_spread": self._get_price_spread,
+            "get_redispatch": self._get_redispatch,
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
@@ -337,6 +340,18 @@ class ToolBox:
             "zone": response.attributes["zone"],
             "series": ["germany", "neighbour", "spread"],
             "sign_convention": "spread = Germany minus neighbour; positive = Germany dearer",
+        }
+
+    def _get_redispatch(self, raw: dict[str, Any]) -> dict[str, Any]:
+        args = PeriodInput.model_validate(raw)
+        self._check_period(args.start, args.end, latest=self.today() - timedelta(days=1))
+        measures = self.data.redispatch(args.start, args.end)
+        response = to_series(measures, args.start, args.end)
+        ref = self._save("get_redispatch", response)
+        return self._summary(ref, response, args.start, args.end) | {
+            "summary": summarize(measures, args.start, args.end),
+            "series": SERIES_NAMES,
+            "method": response.attributes["method"],
         }
 
     def _get_weather(self, raw: dict[str, Any]) -> dict[str, Any]:

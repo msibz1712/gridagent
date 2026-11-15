@@ -201,6 +201,11 @@ SMARD_SOURCE = {
     "url": "https://www.smard.de",
     "license": "CC BY 4.0",
 }
+REDISPATCH_SOURCE = {
+    "name": "netztransparenz.de (the four German TSOs), redispatch measures",
+    "url": "https://www.netztransparenz.de",
+    "license": "© German TSOs; not openly licensed, used for own analysis",
+}
 WEATHER_SOURCE = {
     "name": "Deutscher Wetterdienst (DWD), station observations",
     "url": "https://opendata.dwd.de",
@@ -243,6 +248,11 @@ def _fetch_step(call: ToolCallLog) -> str:
         )
     elif call.name == "get_day_ahead_price":
         what = "day-ahead electricity prices (Germany–Luxembourg)"
+    elif call.name == "get_redispatch":
+        what = "congestion-management measures (redispatch, countertrading) of the German TSOs"
+        if call.is_error:
+            return f"Looked for {what} for {period}: no data available"
+        return f"Retrieved {what} for {period}"
     elif call.name in ("get_neighbour_price", "get_price_spread"):
         zone = NEIGHBOUR_ZONES.get(args.get("zone", ""), args.get("zone", "a neighbour"))
         what = (f"day-ahead electricity prices for {zone}" if call.name == "get_neighbour_price"
@@ -378,6 +388,8 @@ def sources_for_run(log: RunLog) -> list[dict[str, str]]:
         sources.append(SMARD_SOURCE)
     if "get_weather" in names:
         sources.append(WEATHER_SOURCE)
+    if "get_redispatch" in names:
+        sources.append(REDISPATCH_SOURCE)
     for call in ok:
         if call.name != "get_reference_statistics":
             continue
@@ -440,6 +452,16 @@ def _chart_title(
             "spread": "Price difference: Germany minus neighbour",
         }
         return titles.get(source, source)
+    if response_endpoint == "redispatch":
+        titles = {
+            "reduce_total": "Redispatch: generation reduced",
+            "increase_total": "Redispatch: generation increased",
+            "reduce_renewable": "Redispatch: renewable generation curtailed",
+            "reduce_conventional": "Redispatch: conventional generation reduced",
+            "increase_conventional": "Redispatch: conventional generation increased",
+            "increase_other": "Redispatch: increases via the exchange and other",
+        }
+        return titles.get(source, source) + " (MW, measures spread evenly)"
     if response_endpoint == "weather":
         if source == "wind_speed":
             return "Mean wind speed, Germany (DWD, ~10 m)"

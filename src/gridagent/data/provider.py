@@ -5,6 +5,7 @@ Two implementations share this interface:
 - `FixtureDataSource` (fixture_source.py): recorded responses for offline tests/evals
 """
 
+import os
 from datetime import date
 from pathlib import Path
 from typing import Protocol
@@ -13,6 +14,7 @@ from gridagent.data.cache import ResponseCache
 from gridagent.data.client import EnergyChartsClient, NoDataError, berlin_today
 from gridagent.data.dwd import DwdClient, fetch_weather
 from gridagent.data.models import TimeSeriesResponse
+from gridagent.data.netztransparenz import Measure, NetztransparenzClient
 from gridagent.data.smard import SMARD_BASE_URL, SmardClient
 
 
@@ -37,6 +39,8 @@ class DataProvider(Protocol):
 
     def weather(self, start: date, end: date) -> TimeSeriesResponse: ...
 
+    def redispatch(self, start: date, end: date) -> list[Measure]: ...
+
 
 class LiveDataSource:
     """Energy-Charts for national data, SMARD for control areas. Both cached on disk."""
@@ -50,6 +54,8 @@ class LiveDataSource:
         )
         self.smard = SmardClient(get_json=lambda path, end: smard_http.get_json(path, {}, end))
         self.dwd = DwdClient(cache_dir / "dwd")
+        self._ntp_cache = ResponseCache(cache_dir / "netztransparenz")
+        self._ntp: NetztransparenzClient | None = None
 
     def public_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse:
         return self.energy_charts.public_power(start, end, country)
@@ -70,6 +76,16 @@ class LiveDataSource:
         self, region: str, sources: list[str], start: date, end: date
     ) -> TimeSeriesResponse:
         return self.smard.regional(region, sources, start, end)
+
+    def redispatch(self, start: date, end: date) -> list[Measure]:
+        """Needs NTP_CLIENT_ID / NTP_CLIENT_SECRET (free netztransparenz.de account)."""
+        if self._ntp is None:
+            self._ntp = NetztransparenzClient(
+                os.environ.get("NTP_CLIENT_ID", ""),
+                os.environ.get("NTP_CLIENT_SECRET", ""),
+                cache=self._ntp_cache,
+            )
+        return self._ntp.measures(start, end)
 
     def weather(self, start: date, end: date) -> TimeSeriesResponse:
         """DWD publishes observations up to yesterday; a period including today is refused."""

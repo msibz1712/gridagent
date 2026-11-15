@@ -85,6 +85,9 @@ class DatabaseDataSource:
     def weather(self, start: date, end: date) -> TimeSeriesResponse:
         return self._read("weather", start, end)
 
+    def redispatch(self, start: date, end: date):
+        raise NotInDatabase("redispatch measures are not stored (licence: own analysis only)")
+
     def regional(
         self, region: str, sources: list[str], start: date, end: date
     ) -> TimeSeriesResponse:
@@ -134,6 +137,9 @@ class HybridDataSource:
 
     def weather(self, start: date, end: date) -> TimeSeriesResponse:
         return self._either("weather", start, end)
+
+    def redispatch(self, start: date, end: date):
+        return self.live.redispatch(start, end)
 
     def regional(
         self, region: str, sources: list[str], start: date, end: date
