@@ -45,6 +45,7 @@ GENERATION_SERIES = frozenset(
         "fossil_gas",
         "waste",
         "others",
+        "nuclear",  # until April 2023; must count in totals for historical shares
     }
 )
 
@@ -80,6 +81,7 @@ SOURCE_GROUPS: dict[str, dict[str, float]] = {
         "waste": 0.5,
     },
     "waste": {"waste": 1.0},
+    "nuclear": {"nuclear": 1.0},
     "others": {"others": 1.0},
     "load": {"load": 1.0},
     "total": {s: 1.0 for s in GENERATION_SERIES if s != "hydro_pumped_storage"},
@@ -95,7 +97,9 @@ def source_series(response: TimeSeriesResponse, source: str) -> Series:
     """Build the series for a friendly source name by summing its components.
 
     A point is `None` (missing) if any component is missing at that timestamp,
-    so we never silently report a partial total.
+    so we never silently report a partial total. A component series that does
+    not exist in the period at all (e.g. nuclear after April 2023, coal-derived
+    gas before it was reported separately) contributes nothing.
     """
     if source not in SOURCE_GROUPS:
         raise KeyError(f"Unknown source '{source}'. Choose from: {', '.join(available_sources())}")
@@ -103,6 +107,10 @@ def source_series(response: TimeSeriesResponse, source: str) -> Series:
     if source == "load" and "load" not in response.series_ids():
         # total_power reports demand including industrial self-consumption.
         weights = {"load_incl_self_consumption": 1.0}
+    available = set(response.series_ids())
+    weights = {sid: w for sid, w in weights.items() if sid in available}
+    if not weights:
+        raise KeyError(f"'{source}' is not available for this period.")
     components = {sid: response.get_series(sid) for sid in weights}
 
     points: list[Point] = []

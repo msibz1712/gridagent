@@ -136,8 +136,8 @@ def test_unknown_ref_lists_known_refs(box: ToolBox) -> None:
 
 
 def test_unknown_source(box: ToolBox) -> None:
-    assert "nuclear" in error(
-        box, "get_generation", start="2026-11-02", end="2026-11-08", sources=["nuclear"]
+    assert "fusion" in error(
+        box, "get_generation", start="2026-11-02", end="2026-11-08", sources=["fusion"]
     )
 
 

@@ -86,7 +86,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     budget = services.Budget(limit_usd=settings.budget_usd)
     conversations = ConversationStore(max_turns=settings.max_turns)
-    data = services.build_data(settings.use_fixtures, settings.fixture_dir, settings.cache_dir)
+    data = services.build_data(
+        settings.use_fixtures, settings.fixture_dir, settings.cache_dir,
+        services.reader_database_url(),
+    )  # fmt: skip
     app = FastAPI(title="GridAgent", version=__version__, docs_url="/api/docs")
 
     def load_agent() -> LoadedAgent:

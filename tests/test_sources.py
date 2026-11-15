@@ -63,4 +63,39 @@ def test_missing_component_makes_point_missing() -> None:
 
 def test_unknown_source_lists_choices(week_power: TimeSeriesResponse) -> None:
     with pytest.raises(KeyError, match="Choose from"):
-        source_series(week_power, "nuclear")
+        source_series(week_power, "fusion")
+
+
+# ---------- historical data: nuclear (until April 2023), changing series ----------
+
+from conftest import load_response  # noqa: E402
+
+
+def test_2022_renewable_share_matches_energy_charts_with_nuclear_in_total() -> None:
+    """Before April 2023 total generation must include nuclear (verified: 0.17 pp vs 3.6 pp)."""
+    day = load_response("public_power_de_2022-06-01_2022-06-01.json")
+    ours = source_series(day, "renewable").points
+    total = source_series(day, "total").points
+    theirs = day.get_series("renewable_share_of_generation").points
+    for r, t, api in zip(ours, total, theirs, strict=True):
+        assert 100 * r.value / t.value == pytest.approx(api.value, abs=0.2)
+
+
+def test_series_missing_in_a_period_count_as_zero() -> None:
+    day = load_response("public_power_de_2022-06-01_2022-06-01.json")
+    assert "fossil_coal_derived_gas" not in day.series_ids()
+    fossil = source_series(day, "fossil")  # works without coal-derived gas
+    assert fossil.points[0].value > 0
+    assert source_series(day, "nuclear").points[48].value == pytest.approx(3624.5)
+
+
+def test_source_absent_in_whole_period_is_a_clear_error(week_power: TimeSeriesResponse) -> None:
+    with pytest.raises(KeyError, match="not available for this period"):
+        source_series(week_power, "nuclear")  # no nuclear in 2026
+
+
+def test_2018_total_power_is_fully_classified() -> None:
+    day = load_response("total_power_de_2018-06-01_2018-06-01.json")
+    unclassified = set(day.series_ids()) - GENERATION_SERIES - NON_GENERATION_SERIES
+    assert unclassified == set()
+    assert source_series(day, "load").points[0].value > 0

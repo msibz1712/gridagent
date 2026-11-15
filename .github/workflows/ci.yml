@@ -18,6 +18,18 @@ jobs:
     name: Lint, tests and offline evals
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      # Throwaway PostgreSQL (same major version as Supabase) for the database tests.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: gridagent_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +41,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies (exact versions from uv.lock)
-        run: uv sync --locked --extra web
+        run: uv sync --locked --extra web --extra db
 
       - name: Lint
         run: uv run ruff check .
@@ -37,7 +49,9 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
 
-      - name: Tests (offline; live tests are skipped by default)
+      - name: Tests (offline; live tests are skipped by default; db tests use the service)
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/gridagent_test
         run: uv run pytest
 
       - name: Validate agent configs

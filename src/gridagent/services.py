@@ -8,8 +8,10 @@ user needs (answer, period, sources, plain-language method, charts) without
 any agent or model vocabulary.
 """
 
+import importlib.util
 import json
 import math
+import os
 import threading
 from datetime import date
 from pathlib import Path
@@ -42,11 +44,28 @@ def build_llm(config: AgentConfig, model: str | None = None) -> ClaudeLLM:
     )
 
 
-def build_data(use_fixtures: bool, fixture_dir: Path, cache_dir: Path) -> DataProvider:
-    """Recorded fixtures (offline, reproducible) or live Energy-Charts + SMARD (cached)."""
+def reader_database_url() -> str | None:
+    """The database the app reads from: the read-only role if configured, else the owner.
+    None (live APIs only) if neither is set or the optional `db` extra is not installed."""
+    url = os.environ.get("DATABASE_URL_READER") or os.environ.get("DATABASE_URL")
+    if not url or importlib.util.find_spec("psycopg") is None:
+        return None
+    return url
+
+
+def build_data(
+    use_fixtures: bool, fixture_dir: Path, cache_dir: Path, database_url: str | None = None
+) -> DataProvider:
+    """Recorded fixtures (offline, reproducible), or live Energy-Charts + SMARD (cached),
+    with the synced database in front of them when `database_url` is given."""
     if use_fixtures:
         return FixtureDataSource(fixture_dir)
-    return LiveDataSource(cache_dir)
+    live = LiveDataSource(cache_dir)
+    if database_url is None:
+        return live
+    from gridagent.db.source import DatabaseDataSource, HybridDataSource  # optional `db` extra
+
+    return HybridDataSource(DatabaseDataSource(database_url), live)
 
 
 def ask(
@@ -150,6 +169,7 @@ SOURCE_LABELS = {
     "fossil": "fossil fuels",
     "renewable": "renewables",
     "waste": "waste",
+    "nuclear": "nuclear power",
     "others": "other sources",
     "other_renewable": "other renewables",
     "other_conventional": "other conventional sources",

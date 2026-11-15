@@ -94,3 +94,30 @@ Multi-stage image built from `uv.lock` (exact versions), without dev tools, runn
 non-root user, with a health check on `/api/health`. The API key is never part of the
 image: it is passed at run time. The port is published to `127.0.0.1` only, because the
 website can spend API credit. Logs and reports are mounted from the host in `compose.yaml`.
+
+## Database (optional)
+
+History can be served from PostgreSQL (Supabase in production) instead of the APIs:
+faster, no rate limits, any period length. Anything not synced yet, such as today,
+falls back to the live APIs, and so does every request if the database is unreachable.
+
+```bash
+uv sync --extra db
+# .env: DATABASE_URL=postgresql://...   (owner; Supabase: use the session pooler URL)
+uv run garden db init                     # schema `energy` (not exposed by Supabase's web API)
+uv run garden db create-reader            # read-only role; writes DATABASE_URL_READER to .env
+uv run garden db sync --since 2018-01-01 --regional-since 2026-01-01   # first load
+uv run garden db sync                     # later: continue, re-syncing the last 7 days
+uv run garden db status                   # rows, MB, covered date ranges
+```
+
+- One wide table per endpoint (`public_power`, `total_power`, `day_ahead_price`,
+  `cross_border_physical`, `cross_border_trading`, `smard_regional`), 15-minute rows,
+  values as `real` and rounded to 3 decimals when read, so they come back exactly as the
+  API delivered them (tested value for value).
+- `energy.sync_log` records which days were loaded; a request is served from the
+  database only if its whole period is covered. Only complete days are synced.
+- The app answers with the read-only role; the owner URL is only for `db` commands and is
+  kept out of the website container.
+- Tests run against a throwaway PostgreSQL 17 (a service container in CI); locally:
+  `TEST_DATABASE_URL=postgresql://postgres:test@127.0.0.1:5433/gridagent_test uv run pytest`.

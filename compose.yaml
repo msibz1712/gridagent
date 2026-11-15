@@ -8,6 +8,9 @@ services:
         required: false     # without it the site starts and shows "not available"
     environment:
       GARDEN_UI_BUDGET_USD: "1.00"
+      # The website reads with DATABASE_URL_READER (read-only role) from .env.
+      # The owner URL is for `garden db sync` only, so it is kept out of the container.
+      DATABASE_URL: ""
     ports:
       - "127.0.0.1:8000:8000"   # reachable from this machine only
     volumes:

@@ -1,13 +1,15 @@
 """Command-line interface for the Agent Garden (`garden`).
 
 Commands: `list`, `tools`, `validate`, `new`, `run`, `chat`, `runs`, `eval`, `compare`,
-`ui`, `version`.
+`ui`, `version`, and `db init|status|sync` for the optional database.
 
 Paths are relative to the current directory and can be overridden with
 environment variables (useful in Docker):
   GARDEN_AGENTS_DIR (default: agents), GARDEN_TEMPLATE_DIR (default:
   templates/agent_template), GARDEN_LOG_DIR (default: logs),
   GARDEN_CACHE_DIR (default: .cache)
+Database (optional, `db` extra): DATABASE_URL (owner: schema + sync),
+  DATABASE_URL_READER (read-only role used for answering, if set).
 """
 
 import importlib.util
@@ -40,7 +42,13 @@ from gridagent.evals.runner import CaseResult, EvalReport, estimate_live_cost, s
 from gridagent.evals.session import choose_offline_mode, evaluate, load_agent_eval_set
 from gridagent.garden.registry import discover, resolve
 from gridagent.garden.scaffold import create_agent
-from gridagent.services import build_data, build_llm, load_runs, summarize_runs
+from gridagent.services import (
+    build_data,
+    build_llm,
+    load_runs,
+    reader_database_url,
+    summarize_runs,
+)
 from gridagent.tools.definitions import ALL_TOOLS
 
 app = typer.Typer(
@@ -189,7 +197,7 @@ def run(
 
     cfg = loaded.config
     llm = build_llm(cfg, model)
-    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"))
+    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"), _db_url())
     fixed_today = date.fromisoformat(today) if today else None
 
     with console.status(f"Running {cfg.name} {cfg.version} on {llm.model_name}..."):
@@ -396,7 +404,7 @@ def chat(
     except AgentConfigError as exc:
         console.print(f"[red]Could not load agent '{agent}':[/]\n{exc}")
         raise typer.Exit(code=1) from exc
-    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"))
+    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"), _db_url())
     fixed_today = date.fromisoformat(today) if today else None
     runner = Agent(loaded, build_llm(loaded.config, model), data,
                    today=lambda: fixed_today or berlin_today())  # fmt: skip
@@ -495,3 +503,130 @@ def ui(
         )
     console.print(f"GridAgent: open http://localhost:{port} in your browser (Ctrl+C to stop)")
     uvicorn.run("gridagent.web.api:app", host=host, port=port, log_level="warning")
+
+
+# ---------- database (optional `db` extra) ----------
+
+db_app = typer.Typer(help="Optional PostgreSQL store (e.g. Supabase) in front of the APIs.")
+app.add_typer(db_app, name="db")
+
+
+def _db_url() -> str | None:
+    return reader_database_url()
+
+
+def _owner_connection():
+    if importlib.util.find_spec("psycopg") is None:
+        console.print("[red]Needs the optional 'db' extra:[/] uv sync --extra db")
+        raise typer.Exit(code=1)
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        console.print("[red]DATABASE_URL is not set.[/] Put it in .env (never commit it).")
+        raise typer.Exit(code=1)
+    from gridagent.db.store import connect
+
+    return connect(url)
+
+
+@db_app.command("init")
+def db_init() -> None:
+    """Create the `energy` schema and tables (safe to run again)."""
+    from gridagent.db.store import init_schema
+
+    with _owner_connection() as conn:
+        init_schema(conn)
+    console.print("Schema [bold]energy[/] is up to date.")
+
+
+@db_app.command("create-reader")
+def db_create_reader(
+    env_file: Annotated[Path, typer.Option(help="Where DATABASE_URL_READER is written.")] = Path(
+        ".env"
+    ),
+) -> None:
+    """Create the read-only role the app answers with; its URL goes into .env (never printed)."""
+    import secrets
+
+    from gridagent.db.store import create_reader, init_schema, reader_url, set_env_line
+
+    password = secrets.token_urlsafe(24)
+    with _owner_connection() as conn:
+        init_schema(conn)
+        create_reader(conn, password)
+    set_env_line(env_file, "DATABASE_URL_READER", reader_url(os.environ["DATABASE_URL"], password))
+    console.print(f"Read-only role ready; DATABASE_URL_READER written to {env_file}.")
+
+
+@db_app.command("status")
+def db_status() -> None:
+    """Rows, size and synced date ranges per table."""
+    from gridagent.db.store import database_bytes, status
+
+    with _owner_connection() as conn:
+        rows, total = status(conn), database_bytes(conn)
+    table = Table("table", "rows", "size", "covered")
+    for row in rows:
+        covered = "; ".join(
+            f"{region}: " + ", ".join(f"{lo}..{hi}" for lo, hi in ranges)
+            for region, ranges in row["coverage"].items() if ranges
+        )  # fmt: skip
+        table.add_row(
+            row["table"], f"{row['rows']:,}", f"{row['bytes'] / 1e6:.1f} MB", covered or "-"
+        )
+    console.print(table)
+    console.print(f"Database size: {total / 1e6:.1f} MB (Supabase free plan: 500 MB)")
+
+
+@db_app.command("sync")
+def db_sync(
+    since: Annotated[
+        str | None,
+        typer.Option(
+            help="First day (YYYY-MM-DD). Default: continue from the "
+            "last synced day, minus a week of revisions."
+        ),
+    ] = None,
+    until: Annotated[str | None, typer.Option(help="Last day. Default: yesterday.")] = None,
+    tables: Annotated[
+        list[str] | None, typer.Option("--table", help="Only this table (repeatable).")
+    ] = None,
+    regional_since: Annotated[
+        str | None, typer.Option(help="First day for control-area (SMARD) data.")
+    ] = None,
+) -> None:
+    """Load API data into the database (complete days only; re-syncing is safe)."""
+    from datetime import timedelta
+
+    from gridagent.data.provider import LiveDataSource
+    from gridagent.db.store import covered_ranges, init_schema
+    from gridagent.db.sync import RESYNC_DAYS, run_sync
+    from gridagent.db.tables import TABLES
+
+    unknown = sorted(set(tables or []) - set(TABLES))
+    if unknown:
+        console.print(f"[red]Unknown table(s): {unknown}.[/] Known: {', '.join(TABLES)}")
+        raise typer.Exit(code=1)
+    end = date.fromisoformat(until) if until else berlin_today() - timedelta(days=1)
+    with _owner_connection() as conn:
+        init_schema(conn)
+        if since:
+            start = date.fromisoformat(since)
+        else:
+            ranges = covered_ranges(conn, TABLES["public_power"])
+            if not ranges:
+                console.print("[red]Nothing synced yet:[/] pass --since for the first load.")
+                raise typer.Exit(code=1)
+            start = ranges[-1][1] - timedelta(days=RESYNC_DAYS)
+        regional = date.fromisoformat(regional_since) if regional_since else None
+        console.print(f"Syncing {start}..{end}")
+        report = run_sync(
+            conn, LiveDataSource(_path("GARDEN_CACHE_DIR", ".cache")), start, end,
+            tables=tables, regional_since=regional, progress=console.print,
+        )  # fmt: skip
+    console.print(f"Done: {report.rows:,} rows in {report.chunks} chunks.")
+    if report.ignored_series:
+        console.print(f"[yellow]API series without a column:[/] {sorted(report.ignored_series)}")
+    if report.skipped:
+        console.print(f"[yellow]Skipped:[/] {len(report.skipped)} chunk(s)")
+        for item in report.skipped:
+            console.print(f"  {item}")

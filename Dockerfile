@@ -23,11 +23,11 @@ WORKDIR /app
 
 # Dependencies first: this layer is cached until pyproject.toml or uv.lock change.
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --locked --no-dev --extra web --no-install-project
+RUN uv sync --locked --no-dev --extra web --extra db --no-install-project
 
 # Then the project itself, installed as a normal (non-editable) package.
 COPY src ./src
-RUN uv sync --locked --no-dev --extra web --no-editable
+RUN uv sync --locked --no-dev --extra web --extra db --no-editable
 
 # ---------- runtime stage ----------
 FROM python:3.12-slim
