@@ -26,49 +26,28 @@
   </header>
 
   <main>
-    <!-- ASK -->
-    <section class="view" id="view-ask" hidden>
-      <div class="hero">
-        <div class="wrap narrow">
-          <p class="eyebrow">Germany's electricity system</p>
-          <h1>Ask a question. Get an answer you can cite.</h1>
-          <p class="lead">Generation, demand, prices and market values, cross-border flows, control areas and
-            installed capacity, calculated from public data and set against official statistics, with the
-            period, definition and sources stated for every answer.</p>
-
-          <form class="search" id="ask-form" autocomplete="off">
-            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <input id="question" name="question" type="text" maxlength="500"
-                   placeholder="e.g. What share of Germany's electricity came from wind last week?"
-                   aria-label="Your question">
-            <button class="btn btn-primary" id="ask-btn" type="submit">Ask</button>
-          </form>
-          <div class="notice" id="unavailable" hidden>The assistant is not available right now. Please try again later.</div>
-          <div class="examples">
-            <span class="examples-label">Try:</span>
-            <div class="chips" id="examples"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="wrap narrow">
-        <div class="thread-head" id="thread-head" hidden>
+    <!-- ASK: a chat -->
+    <section class="view chat-view" id="view-ask" hidden>
+      <div class="chat-column">
+        <div class="chat-toolbar" id="chat-toolbar" hidden>
           <span class="muted small" id="turn-counter"></span>
           <button class="btn btn-small" id="new-conversation" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New conversation</button>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
         </div>
-        <div id="thread" aria-live="polite"></div>
+        <div class="thread" id="thread" aria-live="polite"></div>
       </div>
 
-      <div class="composer" id="composer" hidden>
-        <div class="wrap narrow">
-          <form class="search compact" id="followup-form" autocomplete="off">
-            <input id="followup" type="text" maxlength="500"
-                   placeholder="Ask a follow-up, e.g. “And the week before?” or “How does that compare with solar?”"
-                   aria-label="Follow-up question">
-            <button class="btn btn-primary" id="followup-btn" type="submit">Ask</button>
+      <div class="composer">
+        <div class="chat-column">
+          <div class="notice" id="unavailable" hidden>The assistant is not available right now. Please try again later.</div>
+          <form class="composer-box" id="ask-form" autocomplete="off">
+            <textarea id="question" rows="1" maxlength="500"
+                      placeholder="Ask about Germany's electricity system…" aria-label="Your message"></textarea>
+            <button class="send-btn" id="ask-btn" type="submit" aria-label="Send">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
           </form>
-          <p class="composer-note muted">Follow-ups build on the answers above. Conversations are kept for 30 minutes and then deleted.</p>
+          <p class="composer-note">Every number is calculated from public data (Energy-Charts, SMARD) and cited. Enter to send, Shift+Enter for a new line. Chats are deleted after 30 minutes.</p>
         </div>
       </div>
     </section>

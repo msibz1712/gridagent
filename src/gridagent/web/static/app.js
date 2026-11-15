@@ -1,7 +1,7 @@
 /* GridAgent website: plain JavaScript, no framework, no build step.
  *
  * Structure: helpers -> API client -> renderers (answer, chart, method) ->
- * conversation (thread of turns + follow-ups) -> router and setup.
+ * chat messages (welcome, user, typing, answer) -> conversation -> router and setup.
  * Security: all text from the server is escaped before it is inserted; the
  * small Markdown renderer only adds formatting tags afterwards.
  */
@@ -218,10 +218,50 @@ function downloadCsv(chart) {
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
-// ---------- answer ----------
+// ---------- chat messages ----------
 
-function answerHtml(result) {
-  const asked = new Date(result.asked_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const AVATAR = '<div class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>';
+
+function scrollToBottom() {
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+function addMessage(html, className) {
+  const message = document.createElement("div");
+  message.className = `msg ${className}`;
+  message.innerHTML = html;
+  $("#thread").appendChild(message);
+  return message;
+}
+
+function addUserMessage(question) {
+  return addMessage(`<div class="msg-bubble">${esc(question)}</div>`, "msg-user");
+}
+
+/** GridAgent's "typing" message; replaced by the answer when it arrives. */
+function addTypingMessage() {
+  return addMessage(`${AVATAR}<div class="msg-body"><p class="msg-name">GridAgent</p>
+    <div class="msg-bubble"><span class="typing"><i></i><i></i><i></i></span>
+    <span class="typing-label">Retrieving the data and calculating…</span></div></div>`, "msg-bot");
+}
+
+function welcomeMessage() {
+  const chips = (state.config?.examples || [])
+    .map((q) => `<button class="chip" type="button" data-q="${esc(q)}">${esc(q)}</button>`).join("");
+  return addMessage(`${AVATAR}<div class="msg-body"><p class="msg-name">GridAgent</p>
+    <div class="msg-bubble"><h2>Hi, I'm GridAgent.</h2>
+      <p>I answer questions about Germany's electricity system: generation and demand, prices and
+      market values, cross-border flows, the four control areas and installed capacity. I calculate
+      every number from public data and tell you the period, definition and sources, so you can cite it.
+      You can ask follow-up questions too.</p>
+      <p>Try one of these:</p>
+      <div class="chips">${chips}</div>
+    </div></div>`, "msg-bot welcome");
+}
+
+/** Fill GridAgent's message with the answer, its charts and method. */
+function showAnswer(message, result) {
+  const asked = new Date(result.asked_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const charts = result.charts.map((c, i) => chartHtml(c, i)).join("");
   const method = result.steps.length || result.sources.length ? `
     <details class="card method">
@@ -233,24 +273,15 @@ function answerHtml(result) {
           <span class="lic">Licence: ${esc(s.license)}</span></div>`).join("")}</div>` : ""}
       </div>
     </details>` : "";
-  return `
-    <article class="card answer ${esc(result.status)}">
-      <p class="question">${esc(result.question)}</p>
-      <div class="text">${markdown(result.answer)}</div>
-      <div class="answer-actions">
-        <span class="muted">Asked ${esc(asked)} · reference ${esc(result.id)}</span>
-        <button class="btn btn-small copy-answer" type="button">Copy answer</button>
-      </div>
-    </article>
-    ${charts}
-    ${method}`;
-}
-
-/** Fill one turn of the thread with its answer, charts and copy button. */
-function showResult(turn, result) {
-  turn.querySelector(".turn-body").innerHTML = answerHtml(result);
-  wireCharts(turn, result.charts);
-  turn.querySelector(".copy-answer").addEventListener("click", async () => {
+  message.className = `msg msg-bot ${result.status}`;
+  message.innerHTML = `${AVATAR}<div class="msg-body"><p class="msg-name">GridAgent</p>
+    <div class="msg-bubble">${markdown(result.answer)}</div>
+    ${charts || method ? `<div class="msg-extras">${charts}${method}</div>` : ""}
+    <div class="msg-actions"><span>${esc(asked)}</span>
+      <button class="link-btn copy-answer" type="button">Copy answer</button>
+      <span>· ref ${esc(result.id)}</span></div></div>`;
+  wireCharts(message, result.charts);
+  message.querySelector(".copy-answer").addEventListener("click", async () => {
     const sources = result.sources.map((s) => `${s.name} (${s.url}), ${s.license}`).join("; ");
     const text = `${result.question}\n\n${result.answer}${sources ? `\n\nSources: ${sources}` : ""}`;
     try { await navigator.clipboard.writeText(text); toast("Answer copied to clipboard."); }
@@ -258,35 +289,29 @@ function showResult(turn, result) {
   });
 }
 
+function showError(message, text) {
+  message.className = "msg msg-bot failed";
+  message.innerHTML = `${AVATAR}<div class="msg-body"><p class="msg-name">GridAgent</p>
+    <div class="msg-bubble"><p>${esc(text)}</p></div></div>`;
+}
+
 // ---------- conversation ----------
 
-function addTurn(question) {
-  const turn = document.createElement("section");
-  turn.className = "turn";
-  turn.innerHTML = `<div class="bubble"><span>${esc(question)}</span></div>
-    <div class="turn-body"><div class="card"><div class="loading-card"><div class="spinner"></div>
-      <span>Retrieving the data and calculating the answer…</span></div>
-      <div class="skeleton" style="width:92%"></div><div class="skeleton" style="width:74%"></div></div></div>`;
-  $("#thread").appendChild(turn);
-  return turn;
-}
-
-function setConversationMode(active) {
-  document.querySelector(".hero").classList.toggle("compact", active);
-  $("#thread-head").hidden = !active;
-  $("#composer").hidden = !active;
-}
-
-function updateTurnCounter(result) {
-  const asked = result.turn;
+function updateComposer(result) {
   const total = result.turn + result.turns_left;
-  $("#turn-counter").textContent = `Question ${asked} of ${total} in this conversation`;
+  $("#chat-toolbar").hidden = false;
+  $("#turn-counter").textContent = `Question ${result.turn} of ${total} in this chat`;
   const full = result.turns_left === 0;
-  $("#followup").disabled = full;
-  $("#followup-btn").disabled = full || !state.config.available;
-  $("#followup").placeholder = full
-    ? "This conversation is full. Start a new conversation to ask more."
-    : "Ask a follow-up, e.g. “And the week before?” or “How does that compare with solar?”";
+  $("#question").disabled = full;
+  $("#question").placeholder = full
+    ? "This chat is full. Start a new chat to ask more."
+    : "Ask a follow-up, e.g. “And the week before?”";
+}
+
+function resizeInput() {
+  const box = $("#question");
+  box.style.height = "auto";
+  box.style.height = `${Math.min(box.scrollHeight, 180)}px`;
 }
 
 async function ask(question) {
@@ -295,38 +320,31 @@ async function ask(question) {
   if (question.length < 3) { toast("Please type a question first."); return; }
   state.busy = true;
   $("#ask-btn").disabled = true;
-  $("#followup-btn").disabled = true;
-  setConversationMode(true);
-  const turn = addTurn(question);
-  turn.scrollIntoView({ behavior: "smooth", block: "start" });
+  $("#question").value = "";
+  resizeInput();
+  addUserMessage(question);
+  const reply = addTypingMessage();
+  scrollToBottom();
   try {
     const result = await api("/api/ask", {
       method: "POST",
       body: JSON.stringify({ question, conversation_id: state.conversationId }),
     });
     if (result.new_conversation) {
-      $("#thread").insertBefore(noticeHtml(
-        "Your earlier conversation had expired, so this question started a new one."), turn);
+      const note = addMessage("Your earlier chat had expired, so this question started a new one.", "system-note");
+      $("#thread").insertBefore(note, reply.previousElementSibling);
     }
     state.conversationId = result.conversation_id;
-    showResult(turn, result);
-    updateTurnCounter(result);
-    $("#followup").value = "";
+    showAnswer(reply, result);
+    updateComposer(result);
   } catch (error) {
-    turn.querySelector(".turn-body").innerHTML = `<article class="card answer failed">
-      <div class="text"><p>${esc(error.message)}</p></div></article>`;
+    showError(reply, error.message);
   } finally {
     state.busy = false;
-    $("#ask-btn").disabled = !state.config.available;
-    if (!$("#followup").disabled) $("#followup-btn").disabled = !state.config.available;
+    $("#ask-btn").disabled = !state.config.available || $("#question").disabled;
+    scrollToBottom();
+    if (!$("#question").disabled) $("#question").focus();
   }
-}
-
-function noticeHtml(message) {
-  const note = document.createElement("div");
-  note.className = "inline-note";
-  note.textContent = message;
-  return note;
 }
 
 function newConversation() {
@@ -336,10 +354,11 @@ function newConversation() {
   }
   state.conversationId = null;
   $("#thread").innerHTML = "";
-  $("#question").value = "";
-  $("#followup").value = "";
-  $("#followup").disabled = false;
-  setConversationMode(false);
+  $("#chat-toolbar").hidden = true;
+  $("#question").disabled = false;
+  $("#question").placeholder = "Ask about Germany's electricity system…";
+  $("#ask-btn").disabled = !state.config.available;
+  welcomeMessage();
   window.scrollTo({ top: 0, behavior: "smooth" });
   $("#question").focus();
 }
@@ -350,6 +369,7 @@ function route() {
   const page = location.hash.startsWith("#/about") ? "about" : "ask";
   document.querySelectorAll(".view").forEach((v) => { v.hidden = v.id !== `view-${page}`; });
   document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === page));
+  document.body.classList.toggle("chat-mode", page === "ask");
   window.scrollTo(0, 0);
 }
 
@@ -376,22 +396,22 @@ async function init() {
   if (state.config.recorded_data) {
     $("#footer-note").textContent = `Using recorded data up to ${state.config.today}`;
   }
-  $("#examples").innerHTML = state.config.examples
-    .map((q) => `<button class="chip" type="button" data-q="${esc(q)}">${esc(q)}</button>`).join("");
+  welcomeMessage();
 
   $("#ask-form").addEventListener("submit", (event) => {
     event.preventDefault();
     ask($("#question").value);
   });
-  $("#followup-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    ask($("#followup").value);
+  $("#question").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      ask($("#question").value);
+    }
   });
-  $("#examples").addEventListener("click", (event) => {
+  $("#question").addEventListener("input", resizeInput);
+  $("#thread").addEventListener("click", (event) => {
     const chip = event.target.closest(".chip");
-    if (!chip) return;
-    $("#question").value = chip.dataset.q;
-    if (state.config.available) ask(chip.dataset.q);
+    if (chip && state.config.available) ask(chip.dataset.q);
   });
   $("#new-conversation").addEventListener("click", newConversation);
 }
