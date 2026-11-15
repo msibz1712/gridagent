@@ -163,7 +163,7 @@ def week_prices(box: ToolBox) -> str:
 def test_battery_tool_stores_a_schedule_for_compute_stats() -> None:
     box = toolbox()
     args = {"ref": week_prices(box), "power_mw": 10, "capacity_mwh": 20,
-            "round_trip_efficiency": None, "wear_cost_eur_per_mwh": None}  # fmt: skip
+            "round_trip_efficiency": 0.9, "wear_cost_eur_per_mwh": 0}  # fmt: skip
     result = json.loads(box.execute("simulate_battery", args).content)
     assert result["ref"] == "battery_2" and result["exact"] and result["zone"] == "DE-LU"
     assert result["battery"]["round_trip_efficiency"] == 0.9 and result["days"] == 7
@@ -185,8 +185,8 @@ def test_flexibility_tools_need_a_price_ref() -> None:
                                                 "max_power_mw": 1})  # fmt: skip
     assert result.is_error and "price ref" in result.content
     bad = box.execute("simulate_battery", {"ref": gen["ref"], "power_mw": -1, "capacity_mwh": 1,
-                                           "round_trip_efficiency": None,
-                                           "wear_cost_eur_per_mwh": None})  # fmt: skip
+                                           "round_trip_efficiency": 0.9,
+                                           "wear_cost_eur_per_mwh": 0})  # fmt: skip
     assert bad.is_error
 
 

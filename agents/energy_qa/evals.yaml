@@ -845,7 +845,7 @@ cases:
       - {label: installed MW, values: [9899.26, 9.9]}
     mentions: [["2023"]]
     tool_calls:
-      - {name: get_plant_register, args: {technology: wind_onshore, state: Nordrhein-Westfalen, from_year: 2023}}
+      - {name: get_plant_register, args: {technology: wind_onshore, area_type: state, area: Nordrhein-Westfalen, from_year: 2023}}
     oracle_answer: "According to the Marktstammdatenregister (register of 1 October 2026), 3,530.85 MW of onshore wind were commissioned in Nordrhein-Westfalen from 2023 to 1 October 2026; 9,899.26 MW are installed. Figures for 2026 are preliminary because units are often registered late. Source: Marktstammdatenregister (Bundesnetzagentur), dl-de/by-2-0"
 
   - id: register_lignite_top_district_nrw
@@ -856,7 +856,7 @@ cases:
     numbers: [{label: lignite MW, values: [2471.8, 2.47]}]
     mentions: [["Rhein-Erft"]]
     tool_calls:
-      - {name: get_plant_register, args: {technology: lignite, state: Nordrhein-Westfalen, group_by: district}}
+      - {name: get_plant_register, args: {technology: lignite, area_type: state, area: Nordrhein-Westfalen, group_by: district}}
     oracle_answer: "The Rhein-Erft-Kreis has the most lignite capacity in Nordrhein-Westfalen: 2,471.8 MW installed according to the Marktstammdatenregister (register of 1 October 2026), ahead of the Rhein-Kreis Neuss (2,120 MW) and the Städteregion Aachen (1,319 MW). Large plants are published by district, not municipality. Source: Marktstammdatenregister (Bundesnetzagentur), dl-de/by-2-0"
 
   - id: register_solar_not_in_excerpt
@@ -865,6 +865,6 @@ cases:
     question: How much rooftop solar is installed in Köln?
     outcome: no_data
     tool_calls:
-      - {name: get_plant_register, args: {technology: solar_rooftop, district: Köln}}
+      - {name: get_plant_register, args: {technology: solar_rooftop, area: Köln}}
     oracle_answer: "Solar data is not available in the copy of the plant register I can use (it was downloaded without solar and storage), so I cannot give the rooftop solar capacity in Köln. Source: Marktstammdatenregister (Bundesnetzagentur), dl-de/by-2-0"
 

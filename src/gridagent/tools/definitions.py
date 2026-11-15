@@ -60,6 +60,12 @@ DATE = {
 }
 
 
+# Series names as plain strings, not an enum: the 48 names repeated in four nullable fields
+# made the compiled grammar of the strict tools too large for the API (live smoke test of
+# 0.9.0). The ToolBox rejects unknown names with the list of valid ones.
+_SERIES = {"type": "string"}
+
+
 def _nullable(schema: dict[str, Any], description: str) -> dict[str, Any]:
     return {"anyOf": [schema, {"type": "null"}], "description": description}
 
@@ -233,7 +239,7 @@ COMPUTE_STATS: dict[str, Any] = {
         "properties": {
             "ref": {"type": "string", "description": "The ref returned by a get_* tool."},
             "operation": {"type": "string", "enum": [op.value for op in Operation]},
-            "source": _nullable({"type": "string", "enum": ALL_SERIES_NAMES}, "Series to use."),
+            "source": _nullable(_SERIES, "Series to use, e.g. solar, wind, load, wind_speed."),
             "relative_to": _nullable(
                 {"type": "string", "enum": available_sources()},
                 "Only for share. Null means total generation.",
@@ -242,8 +248,7 @@ COMPUTE_STATS: dict[str, Any] = {
             "threshold": _nullable({"type": "number"}, "Only for count_below / count_above."),
             "weight_ref": _nullable({"type": "string"}, "Only for capture_price: generation ref."),
             "weight_source": _nullable(
-                {"type": "string", "enum": ALL_SERIES_NAMES},
-                "Only for capture_price: the generation source, e.g. solar.",
+                _SERIES, "Only for capture_price: the generation source, e.g. solar."
             ),
         },
         "required": [
@@ -356,10 +361,7 @@ _CONDITION = {
     "type": "object",
     "properties": {
         "ref": {"type": "string", "description": "Ref whose values decide which hours count."},
-        "source": _nullable(
-            {"type": "string", "enum": ALL_SERIES_NAMES},
-            "Series in that ref (null for a price ref), e.g. wind_speed.",
-        ),
+        "source": _nullable(_SERIES, "Series in that ref (null for a price ref), e.g. wind_speed."),
         "below": _nullable({"type": "number"}, "Hour counts if the value is below this."),
         "above": _nullable({"type": "number"}, "Hour counts if the value is above this."),
     },
@@ -388,10 +390,7 @@ COMPUTE_WHEN: dict[str, Any] = {
         "properties": {
             "operation": {"type": "string", "enum": ["hours", "mean", "min", "max", "energy"]},
             "ref": _nullable({"type": "string"}, "Target ref (null for 'hours')."),
-            "source": _nullable(
-                {"type": "string", "enum": ALL_SERIES_NAMES},
-                "Target series (null for price refs and for 'hours').",
-            ),
+            "source": _nullable(_SERIES, "Target series (null for price refs and for 'hours')."),
             # At most 3, checked by the ToolBox: strict schemas don't support maxItems.
             "conditions": {
                 "type": "array",
@@ -412,7 +411,9 @@ COMPARE_VALUES: dict[str, Any] = {
         "Compare two numbers you got from earlier tool results, e.g. your computed market "
         "value with the official one, this week's wind share with last week's, or two "
         "regions. Returns a - b (difference), (a - b) / |b| in % (percent_difference), "
-        "a / b (ratio) and a + b (sum). Use it for every difference, percentage change, "
+        "a / b (ratio), "
+        "100 * a / b (a_as_percent_of_b: a part as a share of a total) and a + b (sum). "
+        "Use it for every difference, percentage change, "
         "ratio or total of two numbers instead of calculating yourself. Both numbers must "
         "appear in an earlier tool result in this conversation (or in the user's "
         "question), in the same unit; values are rejected otherwise."
@@ -457,12 +458,14 @@ SIMULATE_BATTERY: dict[str, Any] = {
             "ref": _PRICE_REF,
             "power_mw": {"type": "number", "description": "Charge/discharge power, MW."},
             "capacity_mwh": {"type": "number", "description": "Usable energy capacity, MWh."},
-            "round_trip_efficiency": _nullable(
-                {"type": "number"}, "Share of charged energy that comes back (null: 0.9)."
-            ),
-            "wear_cost_eur_per_mwh": _nullable(
-                {"type": "number"}, "Degradation cost per MWh discharged, EUR (null: 0)."
-            ),
+            "round_trip_efficiency": {
+                "type": "number",
+                "description": "Share of charged energy that comes back; 0.9 if not given.",
+            },
+            "wear_cost_eur_per_mwh": {
+                "type": "number",
+                "description": "Degradation cost per MWh discharged, EUR; 0 if not given.",
+            },
         },
         "required": [
             "ref",
@@ -473,7 +476,9 @@ SIMULATE_BATTERY: dict[str, Any] = {
         ],
         "additionalProperties": False,
     },
-    "strict": True,
+    # Not strict: the strict tools' combined grammar hit the API's size limit (live smoke
+    # test of 0.9.0). The ToolBox validates these inputs itself (pydantic, extra="forbid").
+    "strict": False,
 }
 
 PLAN_FLEXIBLE_LOAD: dict[str, Any] = {
@@ -497,11 +502,10 @@ PLAN_FLEXIBLE_LOAD: dict[str, Any] = {
         "required": ["ref", "energy_mwh", "max_power_mw"],
         "additionalProperties": False,
     },
-    "strict": True,
+    # Not strict: the strict tools' combined grammar hit the API's size limit (live smoke
+    # test of 0.9.0). The ToolBox validates these inputs itself (pydantic, extra="forbid").
+    "strict": False,
 }
-
-_NULLABLE_TEXT = {"type": "string"}
-_YEAR = {"type": "integer"}
 
 GET_PLANT_REGISTER: dict[str, Any] = {
     "name": "get_plant_register",
@@ -509,39 +513,40 @@ GET_PLANT_REGISTER: dict[str, Any] = {
         "Installed power plants and storage from the Marktstammdatenregister (MaStR, "
         "Bundesnetzagentur; every unit in Germany down to balcony solar), for Germany, a "
         "federal state, a district (Landkreis or kreisfreie Stadt) or a municipality. Returns "
-        "capacity and number of units installed at the end of `to_year` (latest: the register "
-        "date), what was added and permanently decommissioned from `from_year` to `to_year` "
-        "(by commissioning / decommissioning year), net change, units registered as planned, "
-        "and for wind the capacity added as community energy (Bürgerenergie). `group_by` "
-        "splits the result by state, district, municipality, technology or year (years: "
-        "added and removed that year and installed at its end; places: top 25 by capacity "
-        "added). Temporarily closed units count as installed. Technologies: groups wind, "
-        "solar, renewable, coal, fossil, storage, or single types (solar_rooftop, "
-        "solar_ground, solar_balcony, lignite, battery, ...). Battery and storage figures "
-        "are power (MW), not energy capacity. Small tables are returned directly (no ref)."
+        "capacity and number of units installed at the end of `to_year` (for the current year: "
+        "at the register date), what was added and permanently decommissioned from "
+        "`from_year` to `to_year` (by commissioning / decommissioning year), net change, "
+        "units registered as planned, and for wind the capacity added as community energy "
+        "(Bürgerenergie). `group_by` splits the result by state, district, municipality, "
+        "technology or year (years: added and removed that year and installed at its end; "
+        "places: top 25 by capacity added, each with share_of_installed_pct). For the current "
+        "state only, set from_year and "
+        "to_year to the current year. Temporarily closed units count as installed. "
+        "Technologies: groups wind, solar, renewable, coal, fossil, storage, or single types "
+        "(solar_rooftop, solar_ground, solar_balcony, lignite, battery, ...). Battery and "
+        "storage figures are power (MW), not energy capacity. Returns a small table (no ref)."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
             "technology": {"type": "string", "enum": REGISTER_TECHNOLOGIES},
-            "state": _nullable({"type": "string", "enum": REGISTER_STATES},
-                               "Federal state in German (null: Germany)."),
-            "district": _nullable(_NULLABLE_TEXT, "District name as in the register, e.g. "
-                                  "'Düren', 'Rhein-Erft-Kreis', 'Köln' (null: all)."),
-            "municipality": _nullable(_NULLABLE_TEXT, "Municipality name (null: all)."),
-            "from_year": _nullable(_YEAR, "First year of the changes (null: same as to_year)."),
-            "to_year": _nullable(_YEAR, "Last year; installed is at its end (null: latest)."),
-            "group_by": _nullable(
-                {"type": "string",
-                 "enum": ["state", "district", "municipality", "technology", "year"]},
-                "Split the result (null: totals only).",
-            ),
+            "area_type": {"type": "string",
+                          "enum": ["germany", "state", "district", "municipality"]},
+            "area": {"type": "string", "description": (
+                "'Germany', a state in German (e.g. 'Nordrhein-Westfalen', 'Bayern'), or a "
+                "district / municipality name as in the register (e.g. 'Rhein-Erft-Kreis', "
+                "'Köln', 'Düren').")},
+            "from_year": {"type": "integer", "description": "First year of the changes."},
+            "to_year": {"type": "integer", "description": "Last year; installed is at its end."},
+            "group_by": {"type": "string", "enum": ["none", "state", "district",
+                                                    "municipality", "technology", "year"]},
         },
-        "required": ["technology", "state", "district", "municipality", "from_year",
-                     "to_year", "group_by"],
+        "required": ["technology", "area_type", "area", "from_year", "to_year", "group_by"],
         "additionalProperties": False,
     },
-    "strict": True,
+    # Not strict: the strict tools' combined grammar hit the API's size limit (live smoke
+    # test of 0.9.0). The ToolBox validates these inputs itself (pydantic, extra="forbid").
+    "strict": False,
 }  # fmt: skip
 
 ALL_TOOLS: dict[str, dict[str, Any]] = {

@@ -151,18 +151,17 @@ class BatteryInput(_Input):
     ref: str
     power_mw: float = Field(gt=0, le=10_000)
     capacity_mwh: float = Field(gt=0, le=100_000)
-    round_trip_efficiency: float | None = None
-    wear_cost_eur_per_mwh: float | None = None
+    round_trip_efficiency: float = Field(ge=0.5, le=1)
+    wear_cost_eur_per_mwh: float = Field(ge=0)
 
 
 class RegisterInput(_Input):
     technology: str
-    state: str | None = None
-    district: str | None = None
-    municipality: str | None = None
-    from_year: int | None = Field(None, ge=1900, le=2100)
-    to_year: int | None = Field(None, ge=1900, le=2100)
-    group_by: Literal["state", "district", "municipality", "technology", "year"] | None = None
+    area_type: Literal["germany", "state", "district", "municipality"]
+    area: str
+    from_year: int = Field(ge=1900, le=2100)
+    to_year: int = Field(ge=1900, le=2100)
+    group_by: Literal["none", "state", "district", "municipality", "technology", "year"]
 
 
 class LoadInput(_Input):
@@ -439,9 +438,8 @@ class ToolBox:
         battery = Battery(
             power_mw=args.power_mw,
             capacity_mwh=args.capacity_mwh,
-            round_trip_efficiency=0.9 if args.round_trip_efficiency is None
-            else args.round_trip_efficiency,
-            wear_eur_per_mwh=args.wear_cost_eur_per_mwh or 0.0,
+            round_trip_efficiency=args.round_trip_efficiency,
+            wear_eur_per_mwh=args.wear_cost_eur_per_mwh,
         )  # fmt: skip
         run = simulate_battery(prices, battery)
         ref = self._save("simulate_battery", _battery_response(response, run))
@@ -487,8 +485,10 @@ class ToolBox:
         """Installed capacity and changes from the MaStR aggregate (see tools/register.py)."""
         args = RegisterInput.model_validate(raw)
         register = PlantRegister(self.data.plant_register())
-        result = query(register, args.technology, args.state, args.district, args.municipality,
-                       args.from_year, args.to_year, args.group_by)  # fmt: skip
+        place = {args.area_type: args.area} if args.area_type != "germany" else {}
+        result = query(register, args.technology, **place, from_year=args.from_year,
+                       to_year=args.to_year,
+                       group_by=None if args.group_by == "none" else args.group_by)  # fmt: skip
         return result | {
             "data_source": "Marktstammdatenregister (Bundesnetzagentur)",
             "license": register.data["license"],
@@ -517,6 +517,8 @@ class ToolBox:
             "difference_unit": args.unit,
             "percent_difference": None if args.b == 0 else _round(100 * difference / abs(args.b)),
             "ratio": None if args.b == 0 else _round(args.a / args.b),
+            # "a is 69.8 % of b": a share, which models otherwise work out themselves
+            "a_as_percent_of_b": None if args.b == 0 else _round(100 * args.a / args.b),
             "sum": _round(args.a + args.b),
         }
 

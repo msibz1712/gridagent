@@ -216,8 +216,8 @@ def test_research_panel_is_balanced(register) -> None:
 
 
 def tool(**kwargs) -> dict:
-    args = {"state": None, "district": None, "municipality": None, "from_year": None,
-            "to_year": None, "group_by": None} | kwargs  # fmt: skip
+    args = {"area_type": "germany", "area": "Germany", "from_year": 2026, "to_year": 2026,
+            "group_by": "none"} | kwargs  # fmt: skip
     box = ToolBox(FixtureDataSource(FIXTURE_DIR), today=lambda: date(2026, 11, 14))
     result = box.execute("get_plant_register", args)
     assert not result.is_error, result.content
@@ -240,13 +240,14 @@ def test_register_totals_agree_with_energy_charts() -> None:
 
 
 def test_nrw_lignite_closures_show_in_the_register() -> None:
-    years = {y["name"]: y for y in tool(technology="lignite", state="Nordrhein-Westfalen",
-                                        from_year=2020, group_by="year")["groups"]}  # fmt: skip
+    years = {y["name"]: y for y in tool(technology="lignite", area_type="state",
+                                        area="Nordrhein-Westfalen", from_year=2020,
+                                        group_by="year")["groups"]}  # fmt: skip
     assert years["2021"]["removed_mw"] > 1000 and years["2024"]["removed_mw"] > 2000
 
 
 def test_tool_result_names_source_and_licence() -> None:
-    result = tool(technology="wind", state="Nordrhein-Westfalen")
+    result = tool(technology="wind", area_type="state", area="Nordrhein-Westfalen")
     assert result["register_date"] == "2026-10-01"
     assert (
         "dl-de/by-2-0" in result["license"] and "Marktstammdatenregister" in result["data_source"]
@@ -257,3 +258,9 @@ def test_the_register_counts_as_a_cited_source() -> None:
     from gridagent.evals.scoring import SOURCE_PHRASES, contains_any
 
     assert contains_any("Source: Marktstammdatenregister (Bundesnetzagentur)", SOURCE_PHRASES)
+
+
+def test_groups_carry_their_share_of_the_area(register) -> None:
+    """A live run computed '42 % of the state's lignite' mentally: the tool now gives it."""
+    groups = query(register, "wind", state="Nordrhein-Westfalen", group_by="municipality")["groups"]
+    assert sum(g["share_of_installed_pct"] for g in groups) == pytest.approx(100)

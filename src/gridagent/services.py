@@ -341,12 +341,11 @@ def method_step(call: ToolCallLog, where: str = "") -> str:
 
 
 def _register_step(args: dict) -> str:
-    area = args.get("municipality") or args.get("district") or args.get("state") or "Germany"
+    area = args.get("area") or "Germany"
     what = source_label(args.get("technology")) if args.get("technology") else "power plants"
-    years = ""
-    if args.get("from_year") or args.get("to_year"):
-        years = f", {args.get('from_year') or args.get('to_year')}–{args.get('to_year') or 'today'}"
-    split = f", by {args['group_by']}" if args.get("group_by") else ""
+    first, last = args.get("from_year"), args.get("to_year")
+    years = f", {first}" if first == last else f", {first}–{last}"
+    split = f", by {args['group_by']}" if args.get("group_by") not in (None, "none") else ""
     return f"Looked up {what} capacity in {area} in the power plant register{years}{split}"
 
 

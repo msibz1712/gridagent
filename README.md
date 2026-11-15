@@ -21,9 +21,9 @@ memory or mental arithmetic, and that is checked automatically on every answer.
 *(Unedited answer from a live evaluation run of agent 0.7.0 on Claude Haiku 5.5: it fetched
 prices and weather, ran four conditional calculations and one comparison, all in code.)*
 
-**At a glance:** 13 tools · 62-question eval set · **95–98%** live pass rate on the
+**At a glance:** 16 tools · 68-question eval set · **95–98%** live pass rate on the
 latest versions · **100%** of out-of-scope questions declined correctly · about **$0.001
-and 7 s per question** · 417 tests · CI with free replay of real model answers · Docker · PostgreSQL
+and 7 s per question** · 439 tests · CI with free replay of real model answers · Docker · PostgreSQL
 (Supabase) with 1.5 million rows since 2018.
 
 ---
@@ -52,6 +52,8 @@ preventing exactly that.
 | Capacity | "What was the onshore wind capacity factor in October?" | Energy-Charts installed capacity |
 | Weather and its effects | "How many hours had neither wind nor sun, and how much gas ran then?" | DWD station observations (65 stations) |
 | Grid congestion | "How much renewable power was curtailed by redispatch, and in which hours?" | netztransparenz.de (TSOs' redispatch measures; own account, see licences) |
+| Flexibility | "What could a 10 MW / 20 MWh battery have earned last week?" · "When is it cheapest to run 20 MWh?" | Day-ahead prices; exact day-by-day optimisation in code |
+| Plant register | "How much wind was added in NRW districts since 2023?" · "Which district has the most lignite?" | Marktstammdatenregister (every unit in Germany; by state, district, municipality, year) |
 | Official statistics | "What was the official renewable share in 2025?" | UBA, BDEW / AGEB (curated, with status: final, preliminary, reported) |
 
 It declines what it should not do: forecasts, investment or trading advice, other
@@ -63,9 +65,10 @@ before?", "How does that compare with solar?") build on the conversation.
 ```mermaid
 flowchart LR
     Q[Question] --> M["Claude (Haiku 5.5)<br/>decides which data<br/>and which calculation"]
-    M -- tool calls --> T["13 tools<br/>(fetch · compute · compare)"]
+    M -- tool calls --> T["16 tools<br/>(fetch · compute · compare)"]
     T --> D[("Supabase / PostgreSQL<br/>history since 2018")]
     T --> L["Live APIs<br/>Energy-Charts · SMARD · DWD<br/>netztransparenz (OAuth)"]
+    T --> R[("Plant register<br/>MaStR aggregate")]
     D -. not synced or unreachable .-> L
     T -- "small results + refs" --> M
     M --> A["Answer with definitions,<br/>period and sources"]
@@ -120,21 +123,27 @@ their new features):
 | 0.5.0 | `compare_values` + grounding check | 50 | 96.0% | follow-up differences still mental |
 | 0.6.0 | DWD weather, `compute_when` | 55 | 94.5% (98.2% after test fixes) | the eval itself was too strict once |
 | 0.7.0 | neighbouring markets, follow-up rule | 59 | 98.3% | one count used hourly averages instead of 15-minute prices |
-| **0.8.0** | grid congestion (redispatch) | **62** | **95.0%** (60 run before the cost limit) | a flipped price-spread sign in a follow-up; tools now spell signs out, and the re-run got it right |
+| 0.8.0 | grid congestion (redispatch) | 62 | 95.0% (60 run before the cost limit) | a flipped price-spread sign in a follow-up; tools now spell signs out, and the re-run got it right |
+| **0.10.0** | battery and flexible load (0.9.0), plant register | **68** | **95.6%** | two shares worked out mentally ("42 % of the state"); the tools now return shares, and the re-run used them |
 
-In 0.8.0 the expected numbers were within ±1% in every answer, though one wrong answer
-matched only by coincidence ("92" hours vs 91.22 GWh) and was failed by the stricter
-grounding checks, which is why there are several. Refusals and source citation were 100%.
-Average cost was $0.0010 per question (prompt caching, Haiku; it grows with the number of
-tool descriptions), median latency 7 s. After fixing the tools and two over-strict grader
-rules, the recorded answers replay at 100%; CI re-checks them on every push.
+In 0.10.0 all six new questions (battery, flexible load, plant register) passed or were
+fixed on re-run; the three failures were two shares calculated mentally, caught only by the
+grounding check (the numbers themselves were right), and one correct "no data" answer in
+words the grader did not know yet. Refusals and source citation were 100%. The run cost
+$0.069 for 68 questions ($0.0010 each; prompt caching, Haiku), median latency 7 s. After
+the fixes, the recorded answers replay at 100%; CI re-checks them on every push.
 
 Things the evaluations and checks caught along the way, each now covered by a test: mental
 arithmetic in answers; a misrounded expected answer in the eval set itself; a 4×
 undercount of negative-price hours for years with hourly prices; two daylight-saving bugs
 (the repeated hour when clocks go back); data sources that would have returned German
-prices for a French request; a price-spread sign read the wrong way round; and a tool schema the API rejects (the API refused before the
-model ran, so it cost nothing; a schema test and a one-question smoke test now come first).
+prices for a French request; a price-spread sign read the wrong way round; tool schemas the
+API rejects (once an unsupported keyword, later the limits on nullable parameters and on the
+combined grammar of strict tools: the API refused before the model ran, so it cost nothing;
+schema tests and a one-question smoke test now come first); a failed live question saved as
+an empty recording; and, in the plant register, large power plants published without their
+municipality (now placed in their district) and late registrations that make the latest
+months look smaller than they are (stated in every answer).
 
 ## Data sources and licences
 
@@ -144,6 +153,7 @@ model ran, so it cost nothing; a schema test and a one-question smoke test now c
 | [SMARD](https://www.smard.de) (Bundesnetzagentur) | day-ahead prices (DE-LU and 11 neighbouring zones), control areas | CC BY 4.0 |
 | [DWD open data](https://opendata.dwd.de) | 10-minute wind and solar radiation, 65 stations | CC BY 4.0 |
 | [netztransparenz.de](https://www.netztransparenz.de) (the four TSOs) | redispatch and countertrading measures | © TSOs: not openly licensed (see below) |
+| [Marktstammdatenregister](https://www.marktstammdatenregister.de) (Bundesnetzagentur) | every power plant and storage unit, aggregated by municipality and year | dl-de/by-2-0 |
 | UBA, BDEW / AGEB, netztransparenz | official statistics (curated file with source, date and status) | cited |
 
 Only openly licensed price zones are offered; Energy-Charts marks other zones as
@@ -196,6 +206,11 @@ uv run garden eval energy_qa --live --record --max-cost 0.10      # real model, 
 uv run garden eval energy_qa --live --case price_week_vs_october  # selected questions only
 uv run garden compare energy_qa@0.6.0 energy_qa@0.7.0             # version vs version
 
+# Plant register (Marktstammdatenregister)
+uv run garden mastr sync                  # ~1.7 GB of the 3.3 GB export, read by HTTP range requests
+uv run garden mastr sync --light          # without solar and storage: 30 MB, under a minute
+uv run garden mastr export nrw_wind.csv --state Nordrhein-Westfalen --technology wind
+
 # Database (optional; Supabase or any PostgreSQL)
 uv run garden db init | create-reader | status
 uv run garden db sync --since 2018-01-01 --regional-since 2026-01-01
@@ -220,12 +235,28 @@ APIs, and so does every request if the database is unreachable.
 agents/energy_qa/        agent versions (agent.yaml + system_prompt.md), evals.yaml, recordings
 src/gridagent/agent/     tool-use loop, conversations, run logs
 src/gridagent/tools/     tool definitions, ToolBox, statistics, conditional stats, grounding check
-src/gridagent/data/      API clients (Energy-Charts, SMARD, DWD), caching, recorded-data source
+src/gridagent/data/      API clients (Energy-Charts, SMARD, DWD, netztransparenz, MaStR), caching
 src/gridagent/db/        PostgreSQL schema, sync, database and hybrid data sources
 src/gridagent/evals/     eval set, oracle/replay/live runner, scoring, reports
 src/gridagent/web/       FastAPI backend and the static website
-tests/                   417 tests; independent reference calculations; recorded API data
+tests/                   439 tests; independent reference calculations; recorded API data
 ```
+
+## Plant register
+
+The Marktstammdatenregister lists every generating and storage unit in Germany, about 7
+million, most of them rooftop solar. The Bundesnetzagentur publishes it daily as one
+3.3 GB ZIP of XML files. `garden mastr sync` never downloads the whole file: the server
+accepts HTTP range requests, so it reads the ZIP's table of contents and then only the
+unit files, parsing each as a stream. It keeps an aggregate (municipality × technology ×
+year: capacity added, permanently decommissioned, planned, community-owned wind), about
+1/100 of the size, with codes translated through the register's own catalogue.
+
+National totals agree with Energy-Charts within 0.1–0.7 % (wind, coal, biomass). Two
+things to know when using it: large plants on the high-voltage grid are published with
+their district but not their municipality, and units are often registered months late,
+so the latest months are revised upward. `garden mastr export` writes a balanced
+municipality × year panel as CSV for research, with the citation the licence asks for.
 
 ## Limits and responsible use
 
@@ -243,6 +274,8 @@ tests/                   417 tests; independent reference calculations; recorded
 
 ## Next steps
 
+- The plant register in the database, so the Docker website can use it.
+- Battery value on intraday prices (the day-ahead result is an upper bound only).
 - Weather per control area, and climate context against the 1991–2020 normal.
 - A nightly sync job (GitHub Actions) to keep the database current.
 

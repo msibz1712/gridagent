@@ -34,8 +34,10 @@ STATS_DEFAULTS = {
 
 # Optional inputs of the flexibility tools that eval cases may leave out.
 FLEX_DEFAULTS = {
-    "simulate_battery": {"round_trip_efficiency": None, "wear_cost_eur_per_mwh": None},
+    "simulate_battery": {"round_trip_efficiency": 0.9, "wear_cost_eur_per_mwh": 0},
 }
+REGISTER_DEFAULTS = {"area_type": "germany", "area": "Germany", "from_year": 2026,
+                     "to_year": 2026, "group_by": "none"}  # fmt: skip
 
 
 def oracle_llm(case: EvalCase) -> FakeLLM:
@@ -69,6 +71,8 @@ def oracle_llm(case: EvalCase) -> FakeLLM:
                 if call.name == "get_generation":
                     args.setdefault("sources", None)
                     args.setdefault("scope", None)
+            elif call.name == "get_plant_register":
+                args = {**REGISTER_DEFAULTS, **args}
             elif call.name == "get_installed_capacity":
                 args.setdefault("technologies", None)
             elif call.name == "get_reference_statistics":

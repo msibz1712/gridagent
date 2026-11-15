@@ -63,7 +63,9 @@ def evaluate(
             return RecordingLLM(build_llm(cfg, model))
 
         def after_case(case: EvalCase, log: RunLog, llm: LLM) -> RunLog:
-            if recording is not None and isinstance(llm, RecordingLLM):
+            # A case that failed at the API (e.g. a rejected request) has nothing to replay:
+            # recording it would make later offline evals fail for no reason.
+            if recording is not None and isinstance(llm, RecordingLLM) and llm.responses:
                 recording.cases[case.id] = CaseRecording(
                     question=case.question, responses=llm.responses, latency_s=log.latency_s
                 )
@@ -111,7 +113,7 @@ def evaluate(
     if mode == "replay" and stored is not None and stored.eval_set_hash != eval_hash:
         report.notes.append("Recording was made with a different eval set version.")
 
-    if recording is not None:
+    if recording is not None and recording.cases:
         save_recording(rec_path, recording)
         return report, rec_path
     return report, None

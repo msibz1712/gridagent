@@ -44,9 +44,13 @@ def stats(box: ToolBox, ref: str, operation: str, source=None, relative_to=None,
     )
 
 
+# Validated by the ToolBox only (see STRICT_TOOLS_VERIFIED_LIVE below for why).
+NOT_STRICT = {"simulate_battery", "plan_flexible_load", "get_plant_register"}
+
+
 def test_definitions_are_strict_and_closed() -> None:
-    for tool in ALL_TOOLS.values():
-        assert tool["strict"] is True
+    for name, tool in ALL_TOOLS.items():
+        assert tool["strict"] is (name not in NOT_STRICT), name
         schema = tool["input_schema"]
         assert schema["additionalProperties"] is False
         assert set(schema["required"]) == set(schema["properties"])
@@ -206,3 +210,65 @@ def test_strict_schemas_use_only_supported_keywords() -> None:
     for name, tool in ALL_TOOLS.items():
         bad = _keywords(tool["input_schema"]) & UNSUPPORTED_IN_STRICT
         assert not bad, f"{name} uses {bad}"
+
+
+# The API also limits strict schemas to 16 parameters that can be null (type arrays or
+# anyOf), counted over ALL tools of a request (found the hard way: a live smoke test of
+# 0.10.0 failed with "too many parameters with union types (22 ...)").
+MAX_UNION_PARAMETERS = 16
+
+
+def _unions(schema) -> int:
+    if isinstance(schema, dict):
+        own = "anyOf" in schema or isinstance(schema.get("type"), list)
+        return int(own) + sum(_unions(v) for v in schema.values())
+    if isinstance(schema, list):
+        return sum(_unions(v) for v in schema)
+    return 0
+
+
+def test_every_agent_version_stays_under_the_union_parameter_limit() -> None:
+    from test_loop import AGENTS_DIR
+
+    from gridagent.garden.registry import discover
+    from gridagent.tools.definitions import ALL_TOOLS
+
+    versions = [v.agent for entry in discover(AGENTS_DIR) for v in entry.versions if v.agent]
+    assert versions
+    for agent in versions:
+        tools = [t for t in agent.config.tools if t in ALL_TOOLS]
+        count = sum(_unions(ALL_TOOLS[t]["input_schema"]) for t in tools)
+        assert count <= MAX_UNION_PARAMETERS, f"{agent.config.version}: {count}"
+
+
+# Beyond the explicit limits, the API caps the size of the grammar compiled from all strict
+# schemas of a request ("The compiled grammar is too large", live smoke test of 0.9.0).
+# It can't be computed offline, so: no version may use more strict tools than the set
+# last verified live. Grow this set only after a live smoke test passes.
+STRICT_TOOLS_VERIFIED_LIVE = {
+    "get_generation", "get_day_ahead_price", "get_cross_border_flows",
+    "get_regional_generation", "get_installed_capacity", "get_reference_statistics",
+    "compute_stats", "compare_values", "get_weather", "compute_when", "get_neighbour_price",
+    "get_price_spread", "get_redispatch",
+}  # fmt: skip
+
+
+def test_no_version_uses_unverified_strict_tools() -> None:
+    from test_loop import AGENTS_DIR
+
+    from gridagent.garden.registry import discover
+    from gridagent.tools.definitions import ALL_TOOLS
+
+    for entry in discover(AGENTS_DIR):
+        for version in entry.versions:
+            if version.agent is None:
+                continue
+            strict = {t for t in version.agent.config.tools if ALL_TOOLS[t].get("strict")}
+            assert strict <= STRICT_TOOLS_VERIFIED_LIVE, f"{version.version}: {strict}"
+
+
+@pytest.mark.parametrize("name", sorted(NOT_STRICT))
+def test_non_strict_tools_reject_unknown_fields(box: ToolBox, name: str) -> None:
+    """Without grammar enforcement, the ToolBox's own validation is the guard."""
+    result = box.execute(name, {"ref": "price_1", "surprise": 1})
+    assert result.is_error and "Invalid input" in result.content

@@ -91,6 +91,13 @@ def test_compare_values_computes_difference_percent_ratio_and_sum() -> None:
     assert result["ratio"] == 1.004 and result["sum"] == 26.84
 
 
+def test_compare_values_gives_a_part_as_a_share_of_the_whole() -> None:
+    """A live run wrote '69.8 % of the week's total' from a ratio worked out mentally."""
+    box = toolbox()
+    box.results.append('{"value": 1204} {"value": 1724}')
+    assert json.loads(compare(box, 1204, 1724).content)["a_as_percent_of_b"] == 69.84
+
+
 def test_compare_values_rejects_numbers_the_tools_never_produced() -> None:
     box = toolbox()
     box.results.append('{"value": 13.39}')

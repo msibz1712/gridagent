@@ -53,6 +53,7 @@ NO_DATA_PHRASES = (
     "don't have data",
     "do not have data",
     "no recorded",
+    "no records",
     "isn't available",
     "is not yet available",
     "in the future",

@@ -267,3 +267,20 @@ def test_only_runs_the_selected_cases(tmp_path: Path) -> None:
     report, _ = evaluate(loaded, "oracle", "oracle", FIXTURE_DIR,
                          only=lambda c: c.category == "refusal")  # fmt: skip
     assert report.cases and all(c.category == "refusal" for c in report.cases)
+
+
+def test_a_case_rejected_by_the_api_is_not_recorded(tmp_path: Path, monkeypatch) -> None:
+    """A live smoke test of 0.10.0 failed with HTTP 400 and left an empty recording behind,
+    which then made every offline eval of that version fail."""
+    from gridagent.evals import session
+    from gridagent.llm.base import LLMError
+    from gridagent.llm.fake import FakeLLM
+
+    rejected = lambda cfg, model: FakeLLM([LLMError("Bad request: grammar too large")])  # noqa: E731
+    monkeypatch.setattr(session, "build_llm", rejected)
+    copy = agent_in(tmp_path)
+    first = eval_set.cases[0].id
+    report, path = evaluate(copy, "claude-sonnet-5-5", "live", FIXTURE_DIR, record=True,
+                            only=lambda c: c.id == first)  # fmt: skip
+    assert report.cases[0].status == "error"
+    assert path is None and not recording_path(copy.directory, "claude-sonnet-5-5").exists()

@@ -183,7 +183,7 @@ def query(
         result["groups"] = _by_year(per_year, from_year, to_year)
     elif group_by is not None:
         result["group_by"] = group_by
-        result["groups"] = _ranked(groups)
+        result["groups"] = _ranked(groups, total.installed_kw)
     return result
 
 
@@ -219,9 +219,17 @@ def _group(register: PlantRegister, key: str, tech: str, year: int, group_by: st
     raise RegisterQueryError(f"Unknown group_by '{group_by}'.")
 
 
-def _ranked(groups: dict[str, _Sums]) -> list[dict[str, Any]]:
-    """Places and technologies by added capacity (or installed, if nothing was added), top 25."""
-    rows = [{"name": name, **sums.out()} for name, sums in groups.items()]
+def _ranked(groups: dict[str, _Sums], total_kw: float) -> list[dict[str, Any]]:
+    """Places and technologies by added capacity (or installed, if nothing was added), top 25.
+    Each with its share of the area's installed capacity (models otherwise compute it)."""
+
+    def share(kw: float) -> float | None:
+        return round(100 * kw / total_kw, 2) if total_kw else None
+
+    rows = [
+        {"name": name, **sums.out(), "share_of_installed_pct": share(sums.installed_kw)}
+        for name, sums in groups.items()
+    ]
     key = "added_mw" if any(r["added_mw"] for r in rows) else "installed_mw"
     rows.sort(key=lambda r: r[key], reverse=True)
     if len(rows) > MAX_GROUPS:

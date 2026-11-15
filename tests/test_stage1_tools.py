@@ -102,7 +102,7 @@ def test_per_day_rejected_for_new_operations() -> None:
 def test_tool_schemas_are_strict() -> None:
     for tool in ALL_TOOLS.values():
         schema = tool["input_schema"]
-        assert tool["strict"] and schema["additionalProperties"] is False
+        assert schema["additionalProperties"] is False  # strictness: see test_toolbox.py
         assert set(schema["required"]) == set(schema["properties"])
 
 
