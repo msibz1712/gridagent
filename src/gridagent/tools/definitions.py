@@ -344,7 +344,10 @@ COMPUTE_WHEN: dict[str, Any] = {
         "'mean', 'min', 'max' work on any series; 'energy' sums a MW series to MWh. Returns the "
         "value, hours_selected, hours_considered and share_of_hours_pct. Use it for questions "
         "like 'average price when there was little wind' or 'how many hours with neither wind "
-        "nor sun (Dunkelflaute)'. The condition and target refs must cover the same period. "
+        "nor sun (Dunkelflaute)'. For a threshold on ONE series (e.g. hours with a price above "
+        "300) use compute_stats count_above/count_below instead: it counts every 15-minute "
+        "value, while compute_when averages to hours first and can miss short spikes. "
+        "The condition and target refs must cover the same period. "
         "State the thresholds you used: they are your choice, not an official definition."
     ),
     "input_schema": {
