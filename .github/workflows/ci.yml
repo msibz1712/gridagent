@@ -100,13 +100,15 @@ jobs:
 
       - name: Website starts and answers the health check
         run: |
-          docker run -d --name web -p 127.0.0.1:8000:8000 gridagent:ci
+          # No automatic morning briefing in CI: it would call the live data APIs.
+          docker run -d --name web -e GARDEN_AUTO_BRIEFING=0 -p 127.0.0.1:8000:8000 gridagent:ci
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8000/api/health && break
             sleep 1
           done
           curl -fsS http://127.0.0.1:8000/api/health
-          curl -fsS http://127.0.0.1:8000/ | grep -q "<title>GridAgent"
+          # "/" redirects: to the dashboard, or to the chat while no briefing exists
+          curl -fsSL http://127.0.0.1:8000/ | grep -q "<title>GridAgent"
           # Without an API key the site must say so instead of failing.
           curl -fsS http://127.0.0.1:8000/api/config | grep -q '"available":false'
 
