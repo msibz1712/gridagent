@@ -1,4 +1,8 @@
-# Every morning: yesterday's briefing -> archive branch -> static site -> GitHub Pages.
+# Yesterday's briefing -> archive branch -> static site -> GitHub Pages.
+#
+# NOT SCHEDULED: GridAgent is a personal tool for now (a public German website needs a legal
+# notice). Start it by hand only after setting SITE_LEGAL_NOTICE; for daily use run
+# `garden today` locally.
 #
 # Settings (repository Settings -> Secrets and variables -> Actions):
 #   secrets   DATABASE_URL_READER  read-only database role (never the owner URL)
@@ -9,9 +13,7 @@
 name: Daily briefing site
 
 on:
-  schedule:
-    - cron: "30 5 * * *"  # 06:30 in Germany in winter, 07:30 in summer
-  workflow_dispatch:
+  workflow_dispatch:  # manual only (see above); add a schedule to publish every morning
 
 permissions:
   contents: write  # push the new briefing to the `briefings` branch

@@ -781,7 +781,7 @@ def brief(
             explain_events(briefing, loaded, lambda: build_llm(loaded.config), data, now,
                            max_cost, on_run=lambda log: append_run_log(log_path, log))  # fmt: skip
 
-    from gridagent.monitor.writer import template_story, write_story
+    from gridagent.monitor.writer import NewsStory, template_story, write_story
 
     if explain:
         writer = resolve(_agents_dir(), "news_writer")
@@ -790,6 +790,19 @@ def brief(
         briefing.cost_usd = round(briefing.cost_usd + story.cost_usd, 4)
     else:
         story = template_story(briefing)
+        # A run without the model never replaces what the model already wrote for this day:
+        # the figures are calculated in code, so an earlier story and its explanations still fit.
+        earlier_file = _path("GARDEN_REPORTS_DIR", "reports") / "briefings" / f"{reviewed}.json"
+        if earlier_file.is_file():
+            earlier = json.loads(earlier_file.read_text())
+            if (earlier.get("story") or {}).get("written_by") == "model":
+                story = NewsStory(**earlier["story"])
+                old = {(e["kind"], e.get("from_hour")): e for e in earlier.get("events", [])}
+                for event in briefing.events:
+                    match = old.get((event.kind, event.from_hour))
+                    if match and match.get("explanation"):
+                        event.explanation = match["explanation"]
+                        event.explanation_steps = match.get("explanation_steps", [])
     briefing.story = story.model_dump()
 
     path = save_briefing(_path("GARDEN_REPORTS_DIR", "reports") / "briefings", briefing)
@@ -882,3 +895,24 @@ def site_build(
         raise typer.Exit(code=1) from exc
     console.print(f"Built {len(days)} day(s) into {out}/ (latest: {days[0]}; "
                   f"AI story {'on' if ai_story else 'off'}).")  # fmt: skip
+
+
+@app.command()
+def today(
+    explain: Annotated[
+        bool, typer.Option(help="Model-written story and explanations (~$0.005).")
+    ] = True,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Open the page.")] = True,
+) -> None:
+    """Your morning in one command: yesterday's briefing, built as a local page and opened."""
+    import webbrowser
+
+    from gridagent.site.build import build_site
+
+    brief(day=None, explain=explain, max_cost=0.03, fixtures=False, today=None)
+    out = _path("GARDEN_CACHE_DIR", ".cache") / "site"
+    build_site(_path("GARDEN_REPORTS_DIR", "reports") / "briefings", out, ai_story=explain)
+    page = (out / "index.html").resolve()
+    console.print(f"Page: {page}")
+    if open_browser:
+        webbrowser.open(page.as_uri())

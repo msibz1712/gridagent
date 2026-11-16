@@ -37,7 +37,6 @@ from gridagent.monitor.daily import Briefing
 STATIC = Path(__file__).parent / "static"
 BLUE, ORANGE, GREY, INK = "#0066cc", "#b64400", "#d2d2d7", "#1d1d1f"
 SITE_NAME = "GridAgent"
-LEGAL_PLACEHOLDER = "[YOUR NAME] · [YOUR ADDRESS] · [YOUR E-MAIL]"
 
 
 def esc(value: Any) -> str:
@@ -311,7 +310,7 @@ def footer(root: str) -> str:
   Marktstammdatenregister, © Bundesnetzagentur, dl-de/by-2-0.</p></div>
   <div><p class="title">How this page is made</p>
   <p>Figures and events are calculated in code each morning; "normal" means the four weeks
-  before. <a href="{root}about.html">Method, AI use and legal notice</a>.</p></div>
+  before. <a href="{root}about.html">Method and AI use</a>.</p></div>
 </footer>"""
 
 
@@ -343,8 +342,7 @@ downloaded as JSON from the archive. Recent values are revised by the publishers
 register's latest months grow as late registrations arrive.</p>
 <h2>Privacy</h2>
 <p>This site sets no cookies, loads nothing from other servers and uses no tracking.</p>
-<h2>Legal notice</h2>
-<p>{esc(legal_notice) if legal_notice else LEGAL_PLACEHOLDER}</p>
+{f"<h2>Legal notice</h2><p>{esc(legal_notice)}</p>" if legal_notice else ""}
 </main>{footer(root)}</body></html>
 """  # noqa: E501
 

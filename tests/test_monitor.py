@@ -143,3 +143,20 @@ def test_cli_brief_without_the_model(tmp_path, monkeypatch) -> None:
     assert result.exit_code == 0, result.output
     assert "without explanations" in result.output
     assert (tmp_path / "briefings" / "2026-10-29.json").is_file()
+
+
+def test_a_run_without_the_model_keeps_the_models_story(tmp_path, monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    from gridagent.cli import app
+
+    monkeypatch.setenv("GARDEN_REPORTS_DIR", str(tmp_path))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    args = ["brief", "--fixtures", "--today", "2026-10-30", "--no-explain"]
+    assert CliRunner().invoke(app, args).exit_code == 0
+    path = tmp_path / "briefings" / "2026-10-29.json"
+    saved = json.loads(path.read_text())
+    saved["story"] |= {"written_by": "model", "headline": "A story the model wrote"}
+    path.write_text(json.dumps(saved))
+    assert CliRunner().invoke(app, args).exit_code == 0
+    assert json.loads(path.read_text())["story"]["headline"] == "A story the model wrote"
