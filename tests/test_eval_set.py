@@ -160,6 +160,9 @@ INDEPENDENT = {
     "battery_last_week": lambda: ic.battery_profit(PRICE_WEEK, power=10, capacity=20),
     "battery_october_default_size": lambda: ic.battery_profit(PRICE_OCT, power=1, capacity=2),
     "flexible_load_yesterday": lambda: ic.cheapest_load(PRICE_YDAY, energy=20, power=5)[0],
+    # ---- Forecasts and notable events (0.12.0), from the raw fixtures ----
+    "forecast_vs_actual_wind": lambda: ic.forecast_wind_gwh("2026-10-29"),
+    "notable_events_october_peak": lambda: ic.price_between("2026-10-29", 13, 20),
     # ---- Price events (0.11.0): hour means, comparable days and the fit, from raw rows ----
     "investigate_october_peak": lambda: ic.event_evidence("2026-10-29", 17, 18)["event_price"],
     "investigate_saturday_midday": lambda: ic.event_evidence("2026-10-31", 12, 15)["event_price"],
@@ -187,7 +190,7 @@ def test_eval_set_size_and_coverage() -> None:
     core = [c for c in eval_set.cases if c.min_version is None]
     assert any(c.previous for c in eval_set.cases)  # conversations are covered
     assert 20 <= len(core) <= 30
-    assert len(eval_set.cases) <= 72  # kept small: every live run costs money
+    assert len(eval_set.cases) <= 75  # kept small: every live run costs money
     categories = {c.category for c in eval_set.cases}
     assert {"factual", "tool_use", "ambiguous", "missing_data", "future", "refusal"} <= categories
 
@@ -223,6 +226,9 @@ SECOND_NUMBERS = {
     ],
     "investigate_october_peak": lambda: ic.event_evidence("2026-10-29", 17, 18)["normal_price"],
     "investigate_saturday_midday": lambda: ic.event_evidence("2026-10-31", 12, 15)["normal_price"],
+    "forecast_vs_actual_wind": lambda: (
+        ic.energy_mwh(ic.between(GEN_OCT, "2026-10-29", "2026-10-29"), "wind") / 1000
+    ),
 }
 
 

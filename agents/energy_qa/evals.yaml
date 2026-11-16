@@ -899,3 +899,40 @@ cases:
       - {name: investigate_price_event, args: {date: "2026-10-31", from_hour: 12, to_hour: 15}}
     oracle_answer: "On Saturday 31 October 2026, 12:00-15:00, the day-ahead price averaged 226.74 EUR/MWh, against 56.07 EUR/MWh in the same hours on the 7 comparable weekend days from 3 to 30 October. The residual load was far above a normal weekend midday, with little wind, and the merit-order estimate for that residual load is 219.39 EUR/MWh: residual load accounts for almost all of the price, leaving only 7.35 EUR/MWh unexplained. These are associations over four weeks, not proof of cause. Source: Bundesnetzagentur | SMARD.de via Energy-Charts.info; Deutscher Wetterdienst (DWD)"
 
+  # ---------------- forecasts and notable events (0.12.0) ----------------
+  - id: forecast_vs_actual_wind
+    category: tool_use
+    min_version: 0.12.0
+    question: How much wind energy did the day-ahead forecast expect for 29 October 2026, and how much was actually produced?
+    outcome: answer
+    numbers:
+      - {label: forecast wind GWh, values: [88.6, 88600]}
+      - {label: actual wind GWh, values: [100.7, 100700]}
+    dates: ["2026-10-29"]
+    tool_calls:
+      - {name: get_power_forecast, args: {start: "2026-10-29", end: "2026-10-29"}}
+      - {name: get_generation, args: {start: "2026-10-29", end: "2026-10-29"}}
+      - {name: compute_stats, args: {operation: energy, source: wind}}
+    oracle_answer: "The grid operators' day-ahead forecast for 29 October 2026 expected 88.6 GWh of wind energy; actual public net wind generation (onshore and offshore) was 100.7 GWh. Sources: Energy-Charts.info (Fraunhofer ISE), day-ahead forecasts and generation"
+
+  - id: notable_events_october_peak
+    category: tool_use
+    min_version: 0.12.0
+    question: What stood out on the German power market on 29 October 2026?
+    outcome: answer
+    numbers: [{label: spike price EUR/MWh, values: [394.56]}]
+    dates: ["2026-10-29"]
+    mentions: [["13:00"]]
+    tool_calls:
+      - {name: get_notable_events, args: {date: "2026-10-29"}}
+    oracle_answer: "On 29 October 2026 the main event was a price spike from 13:00 to 20:00: the day-ahead price averaged 394.56 EUR/MWh, against a usual 183.05 for those hours on comparable weekdays, more than the residual load explains. There were further, smaller price spikes in the morning, and wind and solar covered only a small share of demand in the evening. These are associations found by fixed rules, not causes. Source: Bundesnetzagentur | SMARD.de via Energy-Charts.info"
+
+  - id: weather_outlook_not_available
+    category: missing_data
+    min_version: 0.12.0
+    question: How much wind is expected over the next seven days?
+    outcome: no_data
+    tool_calls:
+      - {name: get_weather_outlook, args: {}}
+    oracle_answer: "A weather outlook is not available right now, so I cannot say how much wind is expected over the next seven days. Source: Open-Meteo.com (CC BY 4.0)"
+

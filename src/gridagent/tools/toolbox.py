@@ -26,6 +26,9 @@ from gridagent.data.netztransparenz import SERIES_NAMES, summarize, to_series
 from gridagent.data.provider import DataProvider
 from gridagent.data.reference import lookup
 from gridagent.data.sources import SOURCE_GROUPS, available_sources, source_series
+from gridagent.monitor.anomalies import day_stories, load_history
+from gridagent.monitor.forecasts import daily_gwh
+from gridagent.monitor.week import week_outlook
 from gridagent.tools.conditional import Condition, stats_when
 from gridagent.tools.definitions import (
     ALL_TOOLS,
@@ -165,6 +168,10 @@ class RegisterInput(_Input):
     group_by: Literal["none", "state", "district", "municipality", "technology", "year"]
 
 
+class DayInput(_Input):
+    date: date
+
+
 class EventInput(_Input):
     date: date
     from_hour: int = Field(ge=0, le=23)
@@ -230,6 +237,9 @@ class ToolBox:
             "plan_flexible_load": self._plan_flexible_load,
             "get_plant_register": self._get_plant_register,
             "investigate_price_event": self._investigate_price_event,
+            "get_power_forecast": self._get_power_forecast,
+            "get_weather_outlook": self._get_weather_outlook,
+            "get_notable_events": self._get_notable_events,
         }
         if name not in self.enabled:
             return ToolResult(content=f"Unknown tool '{name}'.", is_error=True)
@@ -530,6 +540,61 @@ class ToolBox:
         result = investigate(args.date, args.from_hour, args.to_hour, start, series)
         ref = self._save("investigate_price_event", _event_response(prices, series))
         return {"ref": ref, **result, "data_source": DATA_SOURCE["price"] + "; DWD weather"}
+
+    def _get_power_forecast(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """The grid operators' day-ahead forecasts (Energy-Charts), as a ref."""
+        args = PeriodInput.model_validate(raw)
+        self._check_period(args.start, args.end, latest=self.today() + timedelta(days=1))
+        response = self.data.forecast(args.start, args.end)
+        ref = self._save("get_power_forecast", response)
+        daily = {}
+        for key in ("wind", "solar", "load"):
+            energy = daily_gwh(response.get_series(key))
+            daily[key] = {d.isoformat(): round(v, 2) for d, v in energy.items()}
+        return self._summary(ref, response, args.start, args.end) | {
+            "series": ["wind", "solar", "load", "residual_load"],
+            "daily_energy_gwh": daily,
+            "data_source": "Energy-Charts.info (grid operators' day-ahead forecasts)",
+        }
+
+    def _get_weather_outlook(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """The dashboard's 7-day outlook (monitor/week.py)."""
+        _Input.model_validate(raw)
+        today = self.today()
+        operators: dict[str, tuple[float, float]] = {}
+        try:
+            published = self.data.forecast(today, today + timedelta(days=1))
+            wind, solar = (daily_gwh(published.get_series(k)) for k in ("wind", "solar"))
+            operators = {d.isoformat(): (wind[d], solar.get(d, 0.0)) for d in wind}
+        except (NoDataError, EnergyChartsError):
+            pass
+        outlook = week_outlook(self.data, today, operators)
+        if outlook is None:
+            raise NoDataError("No weather outlook available right now.")
+        return outlook
+
+    def _get_notable_events(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """The dashboard's ranked stories for one past day (monitor/anomalies.py)."""
+        args = DayInput.model_validate(raw)
+        if args.date >= self.today():
+            raise NoDataError("Notable events exist for past days only.")
+        history = load_history(self.data, args.date)
+        stories = day_stories(self.data, args.date, history)[:6]
+        return {
+            "date": args.date.isoformat(),
+            "events": [
+                {
+                    "kind": s.kind,
+                    "summary": s.title,
+                    "facts": s.facts,
+                    "explained_by_fundamentals": s.explained_by_fundamentals,
+                    "score": s.score,
+                }
+                for s in stories
+            ],  # fmt: skip
+            "history_checked_from": min(history).isoformat() if history else None,
+            "note": "Associations found by fixed rules, not causes. No events = a quiet day.",
+        }
 
     def _compare_values(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Difference, % difference, ratio and sum of two numbers the tools produced."""

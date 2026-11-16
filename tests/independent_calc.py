@@ -320,3 +320,20 @@ def event_evidence(day: str, from_hour: int, to_hour: int) -> dict[str, float]:
         "normal_price": sum(day_means) / len(day_means),
         "expected_price": my + slope * (event_x - mx),
     }
+
+
+# ---------- forecasts and notable events (0.12.0) ----------
+
+
+def forecast_wind_gwh(day: str) -> float:
+    """Day-ahead wind forecast for one local day, from the raw forecast fixture."""
+    data = rows("forecast_de_2026-10-01_2026-10-31.json")
+    return sum(r["values"]["wind"] for r in data if r["timestamp"].startswith(day)) * 0.25 / 1000
+
+
+def price_between(day: str, first_hour: int, end_hour: int) -> float:
+    """Mean day-ahead price of local hours first_hour..end_hour-1 on one day."""
+    data = rows("price_DE-LU_2026-10-01_2026-10-31.json")
+    values = [r["values"]["day_ahead_price"] for r in data if r["timestamp"].startswith(day)
+              and first_hour <= int(r["timestamp"][11:13]) < end_hour]  # fmt: skip
+    return sum(values) / len(values)

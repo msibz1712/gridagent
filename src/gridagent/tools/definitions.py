@@ -579,6 +579,60 @@ INVESTIGATE_PRICE_EVENT: dict[str, Any] = {
     "strict": False,  # validated by the ToolBox (see the strict-tool grammar limit)
 }
 
+GET_POWER_FORECAST: dict[str, Any] = {
+    "name": "get_power_forecast",
+    "description": (
+        "The grid operators' day-ahead forecasts for Germany (Energy-Charts): wind (onshore + "
+        "offshore), solar, demand (load) and residual load (demand minus wind and solar), "
+        "15-minute values in MW, for whole days `start` to `end` (past days, today, and "
+        "tomorrow once published in the afternoon). Returns daily energy per series in GWh "
+        "and a `ref` for compute_stats (e.g. max of residual_load) and for comparing the "
+        "forecast with what actually happened (get_generation). These are the best "
+        "available forecasts for today and tomorrow. Max 93 days per call."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {"start": DATE, "end": DATE},
+        "required": ["start", "end"],
+        "additionalProperties": False,
+    },
+    "strict": False,  # validated by the ToolBox (see the strict-tool grammar limit)
+}
+
+GET_WEATHER_OUTLOOK: dict[str, Any] = {
+    "name": "get_weather_outlook",
+    "description": (
+        "The 7-day outlook from today: expected wind and solar energy (GWh per day) and "
+        "temperature (°C), from Open-Meteo weather forecasts calibrated on actual output over "
+        "the last 60 days; today and tomorrow use the grid operators' forecast where "
+        "published. Each day has `reliability`: 'reliable' up to 4 days ahead, 'rough "
+        "indication' after that (measured accuracy). Also returns a normal day of the past "
+        "four weeks for comparison. Use it for questions about the coming days."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": [],
+                     "additionalProperties": False},
+    "strict": False,
+}  # fmt: skip
+
+GET_NOTABLE_EVENTS: dict[str, Any] = {
+    "name": "get_notable_events",
+    "description": (
+        "What stood out on one past day, ranked by a newsworthiness score: price spikes and "
+        "dips against comparable days (each tested against the merit order: explained by "
+        "residual load or not), negative prices, wind-and-sun lulls, records ('highest "
+        "since ...'), streaks, unusual day-to-day changes and forecast misses. The same "
+        "analysis as the daily dashboard. Returns each event's summary and facts. For the "
+        "drivers of a price event, follow up with investigate_price_event."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {"date": DATE},
+        "required": ["date"],
+        "additionalProperties": False,
+    },
+    "strict": False,
+}
+
 ALL_TOOLS: dict[str, dict[str, Any]] = {
     t["name"]: t
     for t in (
@@ -599,6 +653,9 @@ ALL_TOOLS: dict[str, dict[str, Any]] = {
         PLAN_FLEXIBLE_LOAD,
         GET_PLANT_REGISTER,
         INVESTIGATE_PRICE_EVENT,
+        GET_POWER_FORECAST,
+        GET_WEATHER_OUTLOOK,
+        GET_NOTABLE_EVENTS,
     )
 }
 
@@ -614,4 +671,5 @@ REF_PREFIX = {
     "get_redispatch": "redispatch",
     "simulate_battery": "battery",  # stores its schedule
     "investigate_price_event": "event",  # stores the hourly period it compared
+    "get_power_forecast": "forecast",
 }

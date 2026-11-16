@@ -50,6 +50,9 @@ NOT_STRICT = {
     "plan_flexible_load",
     "get_plant_register",
     "investigate_price_event",
+    "get_power_forecast",
+    "get_weather_outlook",
+    "get_notable_events",
 }
 
 

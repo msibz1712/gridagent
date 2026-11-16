@@ -211,6 +211,11 @@ MASTR_SOURCE = {
     "url": "https://www.marktstammdatenregister.de",
     "license": "dl-de/by-2-0",
 }
+OPEN_METEO_SOURCE = {
+    "name": "Open-Meteo.com, weather forecasts",
+    "url": "https://open-meteo.com",
+    "license": "CC BY 4.0",
+}
 WEATHER_SOURCE = {
     "name": "Deutscher Wetterdienst (DWD), station observations",
     "url": "https://opendata.dwd.de",
@@ -329,6 +334,17 @@ def method_step(call: ToolCallLog, where: str = "") -> str:
         text = (f"Optimised a {args.get('power_mw'):g} MW / {args.get('capacity_mwh'):g} MWh "
                 f"battery day by day on these prices ({efficiency:.0%} round-trip efficiency, "
                 "day-ahead market only)")  # fmt: skip
+    elif call.name == "get_power_forecast":
+        period = format_period(call.input.get("start", ""), call.input.get("end", ""))
+        text = (f"Retrieved the grid operators' day-ahead forecasts of wind, solar and demand "
+                f"for {period}")  # fmt: skip
+    elif call.name == "get_weather_outlook":
+        text = ("Retrieved the 7-day outlook of wind, solar and temperature (weather forecasts "
+                "calibrated on actual output over the last 60 days)")  # fmt: skip
+    elif call.name == "get_notable_events":
+        day = format_period(call.input.get("date", ""), call.input.get("date", ""))
+        text = (f"Checked {day} for unusual prices, records, streaks and forecast misses "
+                "against the four weeks and two years before")  # fmt: skip
     elif call.name == "investigate_price_event":
         args = call.input
         day = format_period(args.get("date", ""), args.get("date", ""))
@@ -423,6 +439,12 @@ def sources_for_run(log: RunLog) -> list[dict[str, str]]:
         sources.append(WEATHER_SOURCE)
     if "get_redispatch" in names:
         sources.append(REDISPATCH_SOURCE)
+    if "get_weather_outlook" in names:
+        sources.append(OPEN_METEO_SOURCE)
+    if names & {"get_power_forecast", "get_notable_events"} and GENERATION_SOURCE not in sources:
+        sources.append(GENERATION_SOURCE)
+    if "get_notable_events" in names and PRICE_SOURCE not in sources:
+        sources.append(PRICE_SOURCE)
     if "investigate_price_event" in names:
         for extra in (PRICE_SOURCE, GENERATION_SOURCE, WEATHER_SOURCE):
             if extra not in sources:
