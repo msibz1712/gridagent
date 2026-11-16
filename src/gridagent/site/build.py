@@ -180,6 +180,50 @@ def _today(b: dict[str, Any]) -> str:
 </div></section>"""  # noqa: E501
 
 
+def _price_forecast(b: dict[str, Any]) -> str:
+    pf = b.get("price_forecast")
+    if not pf:
+        return ""
+    hours = pf["hourly_eur_mwh"]
+    cheap, dear = int(pf["cheapest_hours"][:2]), int(pf["dearest_hours"][:2])
+    colors = [BLUE if cheap <= h < cheap + 3 else ORANGE if dear <= h < dear + 3 else GREY
+              for h in range(len(hours))]  # fmt: skip
+    chart = bars(hours, [f"{h:02d}:00" for h in range(len(hours))], colors, height=180,
+                 unit="€/MWh", label=f"Forecast day-ahead price by hour, {_day(pf['date'])}")  # fmt: skip
+    err = pf["recent_error"]
+    mae = err["mae_eur_mwh"]
+    published = ""
+    if "published_mean_eur_mwh" in pf:
+        published = (
+            f"<p class='lead small'>The auction has run: published average "
+            f"{pf['published_mean_eur_mwh']:,.2f} €/MWh against our forecast of "
+            f"{pf['mean_eur_mwh']:,.2f}; hourly error {pf['mae_vs_published_eur_mwh']:,.2f} €/MWh.</p>"
+        )
+    check = ""
+    if "check_today" in pf:
+        c = pf["check_today"]
+        check = (
+            f"<p class='fine'>Check: our forecast for {esc(_day(c['date']))}, made the day before, averaged "
+            f"{c['forecast_mean_eur_mwh']:,.2f} €/MWh; the published prices averaged {c['actual_mean_eur_mwh']:,.2f} "
+            f"(hourly error {c['mae_eur_mwh']:,.2f}).</p>"
+        )
+    return f"""<section class="wrap section">
+  <p class="eyebrow">Tomorrow · our forecast</p>
+  <h2>{esc(_day(pf["date"]))}: about {pf["mean_eur_mwh"]:,.0f} €/MWh on average.</h2>
+  <p class="lead small">Lowest from {esc(pf["cheapest_hours"])} (about {pf["cheapest_eur_mwh"]:,.0f} €/MWh), highest from
+  {esc(pf["dearest_hours"])} (about {pf["dearest_eur_mwh"]:,.0f}). Over the last four weeks this forecast was off by
+  {mae["forecast"]:,.0f} €/MWh per hour on average; the simple rule "same hour as the day before" by
+  {mae["same hour, day before"]:,.0f}.</p>
+  {published}
+  <figure><figcaption>Forecast day-ahead price by hour <span>€/MWh</span></figcaption>{chart}
+    <div class="axis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div></figure>
+  {check}
+  <p class="fine">GridAgent's own estimate, not a published price: expected wind and solar (Open-Meteo, issued two days
+  before), demand of the same hour a week earlier, and a merit-order curve fitted on the last four weeks. Gas and CO2
+  prices, plant outages and neighbouring markets are not in it, so very expensive days come out too low.</p>
+</section>"""
+
+
 def _week(b: dict[str, Any]) -> str:
     week = b.get("week")
     if not week:
@@ -332,6 +376,7 @@ def page(b: dict[str, Any], ai_story: bool, root: str, days: list[str], app: boo
 {_lead(b, ai_story)}
 {_kpis(b)}
 {_today(b)}
+{_price_forecast(b)}
 {_week(b)}
 {_four_weeks(b)}
 {_events(b, ai_story)}

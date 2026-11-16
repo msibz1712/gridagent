@@ -915,3 +915,25 @@ def forecast_skill(
     console.print(table)
     console.print("[dim]Daily values: forecast daily mean vs actual daily energy (Energy-Charts). "
                   "Weather: Open-Meteo.com, CC BY 4.0.[/]")  # fmt: skip
+
+
+@app.command("price-backtest")
+def price_backtest(
+    start: Annotated[str, typer.Option(help="First day to forecast (YYYY-MM-DD).")],
+    end: Annotated[str, typer.Option(help="Last day.")],
+) -> None:
+    """How good is GridAgent's day-ahead price forecast? (against two simple rules, free)"""
+    from gridagent.monitor.price_forecast import backtest, load_history
+
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    data = build_data(False, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"), _db_url())
+    with console.status("Loading prices, generation and weather forecasts..."):
+        result = backtest(load_history(data, first, last), first, last)
+    table = Table(
+        "forecast", "error per hour (EUR/MWh)", title=f"{start} to {end}, {result['hours']} hours"
+    )
+    for name, mae in result["mae_eur_mwh"].items():
+        table.add_row(name, f"{mae:.2f}")
+    console.print(table)
+    skill, r = result["skill_vs_best_baseline_pct"], result["daily_mean_correlation"]
+    console.print(f"Better than the best simple rule by {skill} %; daily averages: r = {r}.")

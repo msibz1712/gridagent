@@ -22,6 +22,7 @@ from gridagent.data.sources import source_series
 from gridagent.monitor.anomalies import Story, day_stories, load_history
 from gridagent.monitor.forecasts import Outlook, outlook
 from gridagent.monitor.nrw import nrw_snapshot
+from gridagent.monitor.price_forecast import outlook as price_outlook
 from gridagent.monitor.week import week_outlook
 from gridagent.tools.flexibility import Battery, simulate_battery
 from gridagent.tools.investigate import BERLIN, hourly
@@ -86,6 +87,7 @@ class Briefing(BaseModel):
     daily: list[dict[str, Any]] = []
     nrw: dict[str, Any] | None = None  # plant register snapshot (monitor/nrw.py)
     week: dict[str, Any] | None = None  # 7-day outlook from Open-Meteo (monitor/week.py)
+    price_forecast: dict[str, Any] | None = None  # GridAgent's own (monitor/price_forecast.py)
     story: dict[str, Any] | None = None  # the news story (monitor/writer.py)
 
 
@@ -298,6 +300,8 @@ def build_briefing(data: DataProvider, day: date, today: date,
         nrw = None
         not_available.append("plant register")
     week = week_outlook(data, today, {o.day: (o.wind_gwh, o.solar_gwh) for o in outlooks})
+    # Our own price forecast for tomorrow; after the auction it stands next to the result.
+    price_forecast = price_outlook(data, today)
     if week is None:
         not_available.append("7-day weather outlook")
     return Briefing(
@@ -306,6 +310,7 @@ def build_briefing(data: DataProvider, day: date, today: date,
         daily=daily,
         nrw=nrw,
         week=week,
+        price_forecast=price_forecast,
         figures=figures,
         events=events,
         plans=plans,
