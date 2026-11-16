@@ -742,3 +742,60 @@ def mastr_export(
         writer.writerows(rows)
     console.print(f"{len(rows):,} rows -> {out}")
     console.print(f"Source to cite: {ATTRIBUTION}, register of {register.export_date}.")
+
+
+@app.command()
+def brief(
+    day: Annotated[str | None, typer.Option(help="Day to review (default: yesterday).")] = None,
+    explain: Annotated[
+        bool, typer.Option(help="Let the model explain the biggest price events (costs ~$0.003).")
+    ] = True,
+    max_cost: Annotated[float, typer.Option(help="Limit for the explanations, USD.")] = 0.02,
+    fixtures: Annotated[bool, typer.Option("--fixtures", help="Use recorded data.")] = False,
+    today: Annotated[str | None, typer.Option(help="Pretend today is YYYY-MM-DD.")] = None,
+) -> None:
+    """Daily briefing: key figures, notable events and the plan for days with known prices."""
+    from datetime import timedelta
+
+    from gridagent.data.client import EnergyChartsError, NoDataError
+    from gridagent.monitor.daily import build_briefing
+    from gridagent.monitor.explain import explain_events, save_briefing
+
+    now = date.fromisoformat(today) if today else berlin_today()
+    reviewed = date.fromisoformat(day) if day else now - timedelta(days=1)
+    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"), _db_url())
+    try:
+        briefing = build_briefing(data, reviewed, now)
+    except (NoDataError, EnergyChartsError) as exc:
+        console.print(f"[red]No briefing for {reviewed}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if explain and not os.environ.get("ANTHROPIC_API_KEY"):
+        console.print("[yellow]ANTHROPIC_API_KEY not set: briefing without explanations.[/]")
+        explain = False
+    if explain:
+        loaded = resolve(_agents_dir(), "energy_qa")
+        log_path = _path("GARDEN_LOG_DIR", "logs") / "runs.jsonl"
+        with console.status("Explaining the biggest price events..."):
+            explain_events(briefing, loaded, lambda: build_llm(loaded.config), data, now,
+                           max_cost, on_run=lambda log: append_run_log(log_path, log))  # fmt: skip
+
+    path = save_briefing(_path("GARDEN_REPORTS_DIR", "reports") / "briefings", briefing)
+    table = Table("figure", "value", "4-week normal", title=f"Briefing for {reviewed}")
+    for f in briefing.figures:
+        change = f" ({f.change_pct:+.0f} %)" if f.change_pct is not None else ""
+        at = f" at {f.at}" if f.at else ""
+        table.add_row(f.name, f"{f.value} {f.unit}{at}{change}", f"{f.normal}")
+    console.print(table)
+    for event in briefing.events:
+        console.print(f"[bold]• {event.title}[/]")
+        if event.explanation:
+            console.print(Panel(event.explanation, border_style="dim"))
+    for plan in briefing.plans:
+        console.print(f"[cyan]{plan.day}:[/] cheapest {plan.cheapest_hours} "
+                      f"({plan.cheapest_price} EUR/MWh), dearest {plan.dearest_hours} "
+                      f"({plan.dearest_price}); 1 MW / 2 MWh battery: "
+                      f"{plan.battery_profit_eur_per_mw} EUR")  # fmt: skip
+    for missing in briefing.not_available:
+        console.print(f"[yellow]Not available:[/] {missing}")
+    console.print(f"[dim]Saved to {path} (explanations: ${briefing.cost_usd:.4f})[/]")
