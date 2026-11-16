@@ -65,13 +65,13 @@ jobs:
             uv run garden eval "energy_qa@${version}" --oracle --min-pass-rate 1.0
           done
 
-      # Regression gate, not a quality claim: the recorded real answers of 0.10.0 pass 100%
+      # Regression gate, not a quality claim: the recorded real answers of 0.12.0 pass 98.6%
       # after the fixes their live run prompted (first live pass: 95%). The gate allows one
       # failure, so a change that breaks how real answers are checked fails the build.
       - name: Replay the recorded live run of the current version (real model answers, free)
         env:
           GARDEN_REPORTS_DIR: reports
-        run: uv run garden eval energy_qa@0.10.0 --min-pass-rate 0.98
+        run: uv run garden eval energy_qa@0.12.0 --min-pass-rate 0.98
 
       - name: Keep eval reports
         if: always()

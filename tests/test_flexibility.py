@@ -213,3 +213,11 @@ def test_battery_answer_gets_method_steps_and_charts() -> None:
     assert price.title.startswith("Day-ahead electricity price")
     assert stored.title == "Battery: stored energy, MWh" and stored.unit == "MWh"
     assert log.unsupported_numbers == []
+
+
+def test_battery_summary_gives_the_buy_sell_spread() -> None:
+    """A live answer worked out 'a spread of about 95 EUR/MWh' itself: the tool now gives it."""
+    summary = simulate_battery(
+        hourly([10, 100]), Battery(1, 1, round_trip_efficiency=1.0)
+    ).summary()
+    assert summary["average_spread_eur_per_mwh"] == 90.0

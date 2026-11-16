@@ -173,6 +173,9 @@ class BatteryRun:
             "full_cycles_per_day": round(stored_in / self.battery.capacity_mwh / len(self.days), 2),
             "average_buy_price_eur_per_mwh": round(bought / charged, 2) if charged else None,
             "average_sell_price_eur_per_mwh": round(sold / discharged, 2) if discharged else None,
+            # sell minus buy price: answers quoted it from mental arithmetic (live run, 0.12.0)
+            "average_spread_eur_per_mwh": round(sold / discharged - bought / charged, 2)
+            if charged and discharged else None,
             "best_day": {"date": ranked[-1].day.isoformat(),
                          "profit_eur": round(ranked[-1].profit_eur, 2)},
             "worst_day": {"date": ranked[0].day.isoformat(),

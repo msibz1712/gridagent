@@ -124,7 +124,8 @@ their new features):
 | 0.6.0 | DWD weather, `compute_when` | 55 | 94.5% (98.2% after test fixes) | the eval itself was too strict once |
 | 0.7.0 | neighbouring markets, follow-up rule | 59 | 98.3% | one count used hourly averages instead of 15-minute prices |
 | 0.8.0 | grid congestion (redispatch) | 62 | 95.0% (60 run before the cost limit) | a flipped price-spread sign in a follow-up; tools now spell signs out, and the re-run got it right |
-| **0.10.0** | battery and flexible load (0.9.0), plant register | **68** | **95.6%** | two shares worked out mentally ("42 % of the state"); the tools now return shares, and the re-run used them |
+| 0.10.0 | battery and flexible load (0.9.0), plant register | 68 | 95.6% | two shares worked out mentally ("42 % of the state"); the tools now return shares, and the re-run used them |
+| **0.12.0** | price-event investigator (0.11.0), forecasts, 7-day outlook, notable events | **73** | **97.3%** | a buy/sell spread worked out mentally (the battery tool now returns it); one investigation that never named its date |
 
 In 0.10.0 all six new questions (battery, flexible load, plant register) passed or were
 fixed on re-run; the three failures were two shares calculated mentally, caught only by the
