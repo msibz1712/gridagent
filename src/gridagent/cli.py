@@ -799,3 +799,34 @@ def brief(
     for missing in briefing.not_available:
         console.print(f"[yellow]Not available:[/] {missing}")
     console.print(f"[dim]Saved to {path} (explanations: ${briefing.cost_usd:.4f})[/]")
+
+
+@app.command()
+def anomalies(
+    start: Annotated[str, typer.Option(help="First day to check (YYYY-MM-DD).")],
+    end: Annotated[str, typer.Option(help="Last day to check.")],
+    top: Annotated[int, typer.Option(help="Stories shown per day.")] = 2,
+    history_days: Annotated[int, typer.Option(help="Days of history for records.")] = 730,
+    fixtures: Annotated[bool, typer.Option("--fixtures", help="Use recorded data.")] = False,
+) -> None:
+    """Backtest the anomaly detector: the best stories of every day in a period (free)."""
+    from datetime import timedelta
+
+    from gridagent.monitor.anomalies import day_stories, load_history
+
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"), _db_url())
+    span = (last - first).days + history_days
+    with console.status("Loading daily history..."):
+        history = load_history(data, last, days=span)
+    day = first
+    while day <= last:
+        stories = day_stories(data, day, {d: h for d, h in history.items() if d <= day})
+        best = stories[0].score if stories else 0
+        console.print(f"[bold]{day:%a %d %b %Y}[/]  top score {best:.2f}")
+        for story in stories[:top]:
+            tag = {True: " [dim](explained)[/]", False: " [orange3](unexplained)[/]"}.get(
+                story.explained_by_fundamentals, ""
+            )
+            console.print(f"  {story.score:.2f}  {story.kind:<15} {story.title}{tag}")
+        day += timedelta(days=1)

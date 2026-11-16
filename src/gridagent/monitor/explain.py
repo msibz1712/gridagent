@@ -15,12 +15,13 @@ from gridagent.agent.loop import Agent
 from gridagent.agent.runlog import RunLog
 from gridagent.data.provider import DataProvider
 from gridagent.llm.base import LLM
-from gridagent.monitor.daily import EXPLAIN_EVENTS, Briefing, Event, as_dict
+from gridagent.monitor.anomalies import Story
+from gridagent.monitor.daily import EXPLAIN_EVENTS, Briefing, as_dict
 
 PRICE_EVENTS = ("price_spike", "price_dip")
 
 
-def question_for(event: Event, day: date) -> str:
+def question_for(event: Story, day: date) -> str:
     word = "high" if event.kind == "price_spike" else "low"
     return (f"Why was the electricity price so {word} on {day.day} {day:%B %Y} between "
             f"{event.from_hour:02d}:00 and {event.to_hour:02d}:00?")  # fmt: skip

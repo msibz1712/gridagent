@@ -5,13 +5,8 @@ explanations of price events (explain.py) use the model.
 "Normal" always means the 28 days before the reviewed day, so every figure can be
 read as "how unusual was this?".
 
-Event rules (fixed, stated in every event, so a reader can judge them):
-- price spike / price dip: hourly price at least 2.5 standard deviations above
-  (below) the same hour on comparable days (weekdays with weekdays, weekends with
-  weekends) and at least 50 EUR/MWh away from it; consecutive hours form one event.
-- negative prices: any quarter-hour (or hour, before Oct 2025) below 0 EUR/MWh.
-- wind-and-sun lull: wind + solar below 10 % of demand for 4 or more hours in a row.
-- 4-week high: renewable share or solar / wind energy the highest of the 28 days.
+The events ("stories") come from anomalies.py: robust surprise, the merit order,
+records, streaks and day-to-day shifts, ranked by a newsworthiness score.
 """
 
 from collections import defaultdict
@@ -24,14 +19,12 @@ from gridagent.data.client import EnergyChartsError, NoDataError
 from gridagent.data.models import Series, TimeSeriesResponse
 from gridagent.data.provider import DataProvider
 from gridagent.data.sources import source_series
+from gridagent.monitor.anomalies import Story, day_stories, load_history
 from gridagent.tools.flexibility import Battery, simulate_battery
-from gridagent.tools.investigate import BERLIN, hourly, is_weekend
+from gridagent.tools.investigate import BERLIN, hourly
 
 WINDOW_DAYS = 28
-SPIKE_Z = 2.5
-SPIKE_MIN_EUR = 50.0
-LULL_SHARE = 0.10
-LULL_HOURS = 4
+MAX_STORIES = 6  # the lead and up to five shorter items
 EXPLAIN_EVENTS = 2  # price events per day that get a model-written explanation
 
 
@@ -61,18 +54,6 @@ class Figure(BaseModel):
         return round(100 * (self.value - self.normal) / self.normal, 1)
 
 
-class Event(BaseModel):
-    kind: str  # price_spike, price_dip, negative_prices, lull, four_week_high
-    title: str  # one plain sentence, from the numbers
-    rule: str
-    severity: float  # for ordering: z-score or a scale of the rule
-    from_hour: int | None = None
-    to_hour: int | None = None  # exclusive
-    values: dict[str, float] = {}
-    explanation: str | None = None  # by the model (explain.py), with its method steps
-    explanation_steps: list[str] = []
-
-
 class DayPlan(BaseModel):
     """What the known day-ahead prices of one day mean for flexible users."""
 
@@ -90,7 +71,7 @@ class Briefing(BaseModel):
     day: str  # the reviewed day
     generated_at: str
     figures: list[Figure]
-    events: list[Event]
+    events: list[Story]  # best first
     plans: list[DayPlan]
     not_available: list[str] = []
     sources: list[str]
@@ -223,107 +204,6 @@ def _round(value: float | None) -> float | None:
     return None if value is None else round(value, 2)
 
 
-# ---------- events ----------
-
-
-def price_events(day: date, prices: Series) -> list[Event]:
-    """Spikes and dips against the same hour on comparable days, and negative prices."""
-    hourly_prices = _local_hourly(prices)
-    window = [d for d in _days(day - timedelta(days=WINDOW_DAYS), day - timedelta(days=1))
-              if is_weekend(d) == is_weekend(day)]  # fmt: skip
-    flagged: dict[str, dict[int, tuple[float, float, float]]] = {"spike": {}, "dip": {}}
-    for hour in range(24):
-        if (day, hour) not in hourly_prices:
-            continue
-        normal = [hourly_prices[(d, hour)] for d in window if (d, hour) in hourly_prices]
-        if len(normal) < 5:
-            continue
-        mean, spread = _mean(normal) or 0, _std(normal)
-        price = hourly_prices[(day, hour)]
-        if not spread:
-            continue
-        z = (price - mean) / spread
-        if z >= SPIKE_Z and price - mean >= SPIKE_MIN_EUR:
-            flagged["spike"][hour] = (price, mean, z)
-        elif z <= -SPIKE_Z and mean - price >= SPIKE_MIN_EUR:
-            flagged["dip"][hour] = (price, mean, z)
-
-    events = []
-    rule = (f"hourly price ≥ {SPIKE_Z} standard deviations and ≥ {SPIKE_MIN_EUR:.0f} EUR/MWh "
-            "away from the same hour on comparable days of the 4 weeks before")  # fmt: skip
-    for kind, hours in flagged.items():
-        for first, end in _runs(list(hours)):
-            group = [hours[h] for h in range(first, end)]
-            price = sum(g[0] for g in group) / len(group)
-            normal = sum(g[1] for g in group) / len(group)
-            z = max(abs(g[2]) for g in group)
-            word = "above" if kind == "spike" else "below"
-            events.append(Event(
-                kind=f"price_{kind}", rule=rule, severity=round(z, 2),
-                from_hour=first, to_hour=end,
-                title=(f"{_hours_text(first, end)}: the price averaged {price:.2f} EUR/MWh, "
-                       f"{abs(price - normal):.2f} {word} the usual {normal:.2f} for these hours"),
-                values={"price": round(price, 2), "normal": round(normal, 2),
-                        "z_score": round(z, 2)},
-            ))  # fmt: skip
-
-    day_prices = _day_points(prices, day)
-    negative = [p for p in day_prices.points if p.value is not None and p.value < 0]
-    if negative and prices.interval_minutes:
-        hours = len(negative) * prices.interval_minutes / 60
-        lowest = min(p.value for p in negative)  # type: ignore[type-var]
-        local_hours = [p.timestamp.astimezone(BERLIN).hour for p in negative]
-        first, end = min(local_hours), max(local_hours) + 1
-        events.append(Event(
-            kind="negative_prices", rule="any day-ahead price below 0 EUR/MWh",
-            severity=round(1 + hours, 2), from_hour=first, to_hour=end,
-            title=(f"Negative prices for {hours:g} hours between {_hours_text(first, end)}, "
-                   f"down to {lowest:.2f} EUR/MWh"),
-            values={"hours": hours, "lowest": round(lowest, 2)},
-        ))  # fmt: skip
-    return events
-
-
-def supply_events(day: date, generation: TimeSeriesResponse) -> list[Event]:
-    """Wind-and-sun lulls and 4-week highs of renewable output."""
-    events = []
-    wind = _local_hourly(source_series(generation, "wind"))
-    solar = _local_hourly(source_series(generation, "solar"))
-    load = _local_hourly(source_series(generation, "load"))
-    lull = [h for h in range(24) if (day, h) in load and (day, h) in wind and (day, h) in solar
-            and wind[(day, h)] + solar[(day, h)] < LULL_SHARE * load[(day, h)]]  # fmt: skip
-    for first, end in _runs(lull):
-        if end - first < LULL_HOURS:
-            continue
-        hours = range(first, end)
-        share = (
-            100
-            * sum(wind[(day, h)] + solar[(day, h)] for h in hours)
-            / sum(load[(day, h)] for h in hours)
-        )
-        events.append(Event(
-            kind="lull", severity=round(1 + (end - first) / 2, 2), from_hour=first, to_hour=end,
-            rule=f"wind + solar below {LULL_SHARE:.0%} of demand for {LULL_HOURS}+ hours in a row",
-            title=(f"{_hours_text(first, end)}: wind and solar covered only {share:.1f} % "
-                   "of demand"),
-            values={"hours": end - first, "wind_solar_share_pct": round(share, 1)},
-        ))  # fmt: skip
-
-    window = _days(day - timedelta(days=WINDOW_DAYS), day)
-    for source, label in (("solar", "Solar energy"), ("wind", "Wind energy")):
-        series = source_series(generation, source)
-        daily = {d: _energy_gwh(_day_points(series, d)) for d in window}
-        daily = {d: v for d, v in daily.items() if v is not None}
-        if day in daily and len(daily) > 7 and daily[day] == max(daily.values()):
-            events.append(Event(
-                kind="four_week_high", severity=1.0,
-                rule="the highest daily value of the last 4 weeks",
-                title=f"{label} {daily[day]:.2f} GWh: the highest of the last 4 weeks",
-                values={"gwh": round(daily[day], 2)},
-            ))  # fmt: skip
-    return events
-
-
 # ---------- plan for a day with known prices ----------
 
 
@@ -358,21 +238,23 @@ def day_plan(day: date, prices: Series, block_hours: int = 3) -> DayPlan | None:
 # ---------- the whole briefing ----------
 
 
-def build_briefing(data: DataProvider, day: date, today: date) -> Briefing:
+def build_briefing(data: DataProvider, day: date, today: date,
+                   history: dict[date, dict] | None = None) -> Briefing:  # fmt: skip
     """The briefing for `day` (usually yesterday), with plans for `today` and tomorrow
-    when their day-ahead prices are published."""
+    when their day-ahead prices are published. `history`: daily figures for records and
+    streaks (loaded when not given; two years from the database are quick)."""
     start = day - timedelta(days=WINDOW_DAYS)
     prices = data.day_ahead_price(start, day).get_series("day_ahead_price")
     not_available: list[str] = []
     figures: list[Figure] = []
-    events = price_events(day, prices)
     try:
         generation = data.public_power(start, day)
         figures = day_figures(day, prices, generation)
-        events += supply_events(day, generation)
     except (NoDataError, EnergyChartsError, KeyError) as exc:
         not_available.append(f"generation data ({exc})")
-    events.sort(key=lambda e: -e.severity)
+    if history is None:
+        history = load_history(data, day)
+    events = day_stories(data, day, history)[:MAX_STORIES]
 
     plans = []
     for plan_day in (today, today + timedelta(days=1)):
