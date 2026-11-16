@@ -313,3 +313,13 @@ def test_refresh_runs_in_the_background_with_a_self_reloading_wait_page(
     done = client.get("/refresh/wait", follow_redirects=False)
     assert done.status_code == 303 and done.headers["location"] == "/"
     assert calls == [1] and app.state.last_refresh == "Briefing ready."
+
+
+def test_wait_page_also_covers_a_briefing_started_by_the_daily_loop(settings: Settings) -> None:
+    app = create_app(settings)
+    client = TestClient(app)
+    with app.state.refreshing:  # the daily loop is building a briefing; no button thread
+        wait = client.get("/refresh/wait", follow_redirects=False)
+        assert wait.status_code == 200 and 'http-equiv="refresh"' in wait.text
+    done = client.get("/refresh/wait", follow_redirects=False)
+    assert done.status_code == 303 and done.headers["location"] == "/"

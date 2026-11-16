@@ -9,7 +9,6 @@ The events ("stories") come from anomalies.py: robust surprise, the merit order,
 records, streaks and day-to-day shifts, ranked by a newsworthiness score.
 """
 
-from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -21,11 +20,12 @@ from gridagent.data.provider import DataProvider
 from gridagent.data.sources import source_series
 from gridagent.monitor.anomalies import Story, day_stories, load_history
 from gridagent.monitor.forecasts import Outlook, outlook
+from gridagent.monitor.hours import best_blocks, by_local_hour, clock_list, hours_text
 from gridagent.monitor.nrw import nrw_snapshot
 from gridagent.monitor.price_forecast import outlook as price_outlook
 from gridagent.monitor.week import week_outlook
 from gridagent.tools.flexibility import Battery, simulate_battery
-from gridagent.tools.investigate import BERLIN, hourly
+from gridagent.tools.investigate import BERLIN
 from gridagent.tools.register import PlantRegister
 
 WINDOW_DAYS = 28
@@ -70,7 +70,7 @@ class DayPlan(BaseModel):
     dearest_price: float
     negative_hours: float
     battery_profit_eur_per_mw: float  # 1 MW / 2 MWh, 90 % round trip
-    hourly_prices: list[float] = []  # local hours 0..23 (for the chart)
+    hourly_prices: list[float | None] = []  # index = local clock hour 0..23 (for the chart)
 
 
 class Briefing(BaseModel):
@@ -115,30 +115,6 @@ def _energy_gwh(series: Series) -> float | None:
 
 def _days(start: date, end: date) -> list[date]:
     return [start + timedelta(days=i) for i in range((end - start).days + 1)]
-
-
-def _hours_text(from_hour: int, to_hour: int) -> str:
-    return f"{from_hour:02d}:00–{to_hour:02d}:00"
-
-
-def _runs(hours: list[int]) -> list[tuple[int, int]]:
-    """Consecutive local hours -> (first, end exclusive)."""
-    runs: list[tuple[int, int]] = []
-    for h in sorted(hours):
-        if runs and runs[-1][1] == h:
-            runs[-1] = (runs[-1][0], h + 1)
-        else:
-            runs.append((h, h + 1))
-    return runs
-
-
-def _local_hourly(series: Series) -> dict[tuple[date, int], float]:
-    """(local date, local hour) -> hourly mean (the repeated DST hour: both hours' mean)."""
-    by_key: dict[tuple[date, int], list[float]] = defaultdict(list)
-    for hour, value in hourly(series).items():
-        local = hour.astimezone(BERLIN)
-        by_key[(local.date(), local.hour)].append(value)
-    return {k: sum(v) / len(v) for k, v in by_key.items()}
 
 
 def _mean(values: list[float]) -> float | None:
@@ -222,30 +198,23 @@ def _round(value: float | None) -> float | None:
 
 def day_plan(day: date, prices: Series, block_hours: int = 3) -> DayPlan | None:
     """Cheapest and dearest `block_hours` in a row, and a 1 MW / 2 MWh battery's profit."""
-    hours = _local_hourly(_day_points(prices, day))
-    keys = sorted(h for (d, h) in hours if d == day)
-    if len(keys) < 20:
+    hours = {hr: v for (d, hr), v in by_local_hour(_day_points(prices, day)).items() if d == day}
+    if len(hours) < 20:
         return None
-    blocks = [
-        (h, _mean([hours[(day, x)] for x in range(h, h + block_hours)]))
-        for h in keys
-        if all((day, x) in hours for x in range(h, h + block_hours))
-    ]
-    cheap = min(blocks, key=lambda b: b[1])
-    dear = max(blocks, key=lambda b: b[1])
+    cheap, cheap_price, dear, dear_price = best_blocks(hours, block_hours)
     series = _day_points(prices, day)
     battery = simulate_battery(series, Battery(power_mw=1, capacity_mwh=2)).summary()
     values = _values(series)
     return DayPlan(
         day=day.isoformat(),
         mean_price=round(sum(values) / len(values), 2),
-        cheapest_hours=_hours_text(cheap[0], cheap[0] + block_hours),
-        cheapest_price=round(cheap[1] or 0, 2),
-        dearest_hours=_hours_text(dear[0], dear[0] + block_hours),
-        dearest_price=round(dear[1] or 0, 2),
+        cheapest_hours=hours_text(cheap, cheap + block_hours),
+        cheapest_price=round(cheap_price, 2),
+        dearest_hours=hours_text(dear, dear + block_hours),
+        dearest_price=round(dear_price, 2),
         negative_hours=sum(v < 0 for v in values) * (prices.interval_minutes or 60) / 60,
         battery_profit_eur_per_mw=battery["profit_eur_per_mw"],
-        hourly_prices=[round(hours[(day, h)], 2) for h in keys],
+        hourly_prices=clock_list(hours),  # by clock hour; None for a missing hour
     )
 
 
@@ -302,6 +271,8 @@ def build_briefing(data: DataProvider, day: date, today: date,
     week = week_outlook(data, today, {o.day: (o.wind_gwh, o.solar_gwh) for o in outlooks})
     # Our own price forecast for tomorrow; after the auction it stands next to the result.
     price_forecast = price_outlook(data, today)
+    if price_forecast is None:
+        not_available.append("price forecast for tomorrow")
     if week is None:
         not_available.append("7-day weather outlook")
     return Briefing(

@@ -31,7 +31,8 @@ from gridagent.data.client import EnergyChartsError, NoDataError
 from gridagent.data.models import Series, TimeSeriesResponse
 from gridagent.data.provider import DataProvider
 from gridagent.data.sources import source_series
-from gridagent.tools.investigate import BERLIN, hourly, is_weekend
+from gridagent.monitor.hours import by_local_hour, hours_text, runs
+from gridagent.tools.investigate import BERLIN, is_weekend
 
 WINDOW_DAYS = 28
 MAD_TO_SD = 1.4826
@@ -98,34 +99,12 @@ def quadratic_fit(xs: list[float], ys: list[float]) -> tuple[float, float, float
     return tuple(m[i][3] / m[i][i] for i in range(3))  # type: ignore[return-value]
 
 
-def _by_local_hour(series: Series) -> dict[tuple[date, int], float]:
-    out: dict[tuple[date, int], list[float]] = defaultdict(list)
-    for hour, value in hourly(series).items():
-        local = hour.astimezone(BERLIN)
-        out[(local.date(), local.hour)].append(value)
-    return {k: sum(v) / len(v) for k, v in out.items()}
-
-
-def _runs(hours: list[int]) -> list[tuple[int, int]]:
-    runs: list[tuple[int, int]] = []
-    for h in sorted(hours):
-        if runs and runs[-1][1] == h:
-            runs[-1] = (runs[-1][0], h + 1)
-        else:
-            runs.append((h, h + 1))
-    return runs
-
-
 def _clip(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 
 def _score(parts: dict[str, float], weights: dict[str, float]) -> float:
     return round(sum(weights[k] * parts[k] for k in weights), 3)
-
-
-def _hours(first: int, end: int) -> str:
-    return f"{first:02d}:00–{end:02d}:00"
 
 
 # ---------- 1 + 2: price stories ----------
@@ -136,8 +115,8 @@ PRICE_WEIGHTS = {"surprise": 0.35, "unexplained": 0.25, "size": 0.25, "duration"
 
 def price_stories(day: date, price: Series, residual_load: Series | None) -> list[Story]:
     """Spikes and dips against the robust normal, each tested against the merit order."""
-    prices = _by_local_hour(price)
-    residual = _by_local_hour(residual_load) if residual_load is not None else {}
+    prices = by_local_hour(price)
+    residual = by_local_hour(residual_load) if residual_load is not None else {}
     window = [day - timedelta(days=i) for i in range(1, WINDOW_DAYS + 1)]
     comparable = [d for d in window if is_weekend(d) == is_weekend(day)]
 
@@ -173,7 +152,7 @@ def price_stories(day: date, price: Series, residual_load: Series | None) -> lis
 
     stories = []
     for kind, hours in flagged.items():
-        for first, end in _runs(list(hours)):
+        for first, end in runs(list(hours)):
             group = [hours[h] for h in range(first, end)]
 
             def mean(key: str, group: list[dict[str, float]] = group) -> float:
@@ -182,7 +161,7 @@ def price_stories(day: date, price: Series, residual_load: Series | None) -> lis
             price_now, normal = mean("price"), mean("normal")
             z = max(abs(g["z"]) for g in group)
             facts: dict[str, Any] = {
-                "date": day.isoformat(), "hours": _hours(first, end),
+                "date": day.isoformat(), "hours": hours_text(first, end),
                 "price_eur_mwh": round(price_now, 2), "normal_eur_mwh": round(normal, 2),
                 "difference_eur_mwh": round(price_now - normal, 2), "robust_z": round(z, 2),
                 "comparable_days": len(comparable),
@@ -208,7 +187,7 @@ def price_stories(day: date, price: Series, residual_load: Series | None) -> lis
             stories.append(Story(
                 kind=f"price_{kind}", score=_score(parts, PRICE_WEIGHTS), score_parts=parts,
                 facts=facts, from_hour=first, to_hour=end, explained_by_fundamentals=explained,
-                title=(f"{_hours(first, end)}: {price_now:.2f} EUR/MWh, "
+                title=(f"{hours_text(first, end)}: {price_now:.2f} EUR/MWh, "
                        f"{abs(price_now - normal):.2f} {word} the usual {normal:.2f}{reading}"),
             ))  # fmt: skip
     return stories
@@ -242,13 +221,13 @@ def negative_price_story(day: date, price: Series) -> Story | None:
 
 
 def lull_stories(day: date, generation: TimeSeriesResponse) -> list[Story]:
-    wind = _by_local_hour(source_series(generation, "wind"))
-    solar = _by_local_hour(source_series(generation, "solar"))
-    load = _by_local_hour(source_series(generation, "load"))
+    wind = by_local_hour(source_series(generation, "wind"))
+    solar = by_local_hour(source_series(generation, "solar"))
+    load = by_local_hour(source_series(generation, "load"))
     lull = [h for h in range(24) if all((day, h) in s for s in (wind, solar, load))
             and wind[(day, h)] + solar[(day, h)] < LULL_SHARE * load[(day, h)]]  # fmt: skip
     stories = []
-    for first, end in _runs(lull):
+    for first, end in runs(lull):
         if end - first < LULL_HOURS:
             continue
         hs = range(first, end)
@@ -261,9 +240,9 @@ def lull_stories(day: date, generation: TimeSeriesResponse) -> list[Story]:
         stories.append(Story(
             kind="lull", score_parts=parts, score=_score(parts, {"duration": 0.4, "depth": 0.2}),
             from_hour=first, to_hour=end,
-            facts={"date": day.isoformat(), "hours": _hours(first, end),
+            facts={"date": day.isoformat(), "hours": hours_text(first, end),
                    "wind_and_solar_share_of_demand_pct": round(share, 1)},
-            title=f"{_hours(first, end)}: wind and solar covered {share:.1f} % of demand",
+            title=f"{hours_text(first, end)}: wind and solar covered {share:.1f} % of demand",
         ))  # fmt: skip
     return stories
 

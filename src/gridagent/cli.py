@@ -936,4 +936,9 @@ def price_backtest(
         table.add_row(name, f"{mae:.2f}")
     console.print(table)
     skill, r = result["skill_vs_best_baseline_pct"], result["daily_mean_correlation"]
-    console.print(f"Better than the best simple rule by {skill} %; daily averages: r = {r}.")
+    if skill is None:
+        console.print("Not enough data to compare with the simple rules.")
+    elif skill > 0:
+        console.print(f"Better than the best simple rule by {skill} %; daily averages: r = {r}.")
+    else:
+        console.print(f"Not better than the best simple rule ({skill} %); daily averages: r = {r}.")

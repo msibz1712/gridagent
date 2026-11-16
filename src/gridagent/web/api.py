@@ -16,6 +16,7 @@ Configuration (environment variables):
     GARDEN_AGENTS_DIR, GARDEN_LOG_DIR, GARDEN_CACHE_DIR   as for the CLI
 """
 
+import logging
 import os
 import threading
 import time
@@ -40,6 +41,8 @@ from gridagent.garden.registry import resolve
 from gridagent.monitor.run import run_briefing
 from gridagent.site.build import build_site
 from gridagent.tools.toolbox import ToolBox
+
+log = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 AUTO_BRIEFING_EVERY_SECONDS = 30 * 60
@@ -216,14 +219,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def daily_loop() -> None:
         while True:
             yesterday = berlin_today() - timedelta(days=1)
-            if not (settings.reports_dir / "briefings" / f"{yesterday}.json").is_file():
-                refresh(yesterday)
+            try:
+                if not (settings.reports_dir / "briefings" / f"{yesterday}.json").is_file():
+                    refresh(yesterday)
+            except Exception:  # one failed day (network, API) must not stop the loop for good
+                log.exception("Daily briefing for %s failed; trying again later", yesterday)
             time.sleep(AUTO_BRIEFING_EVERY_SECONDS)
 
     rebuild_pages()  # pages for briefings made elsewhere (e.g. `garden brief`)
     if settings.auto_briefing and not settings.use_fixtures:
         threading.Thread(target=daily_loop, name="daily-briefing", daemon=True).start()
     app.state.refresh = refresh  # for tests
+    app.state.refreshing = refreshing  # held while any briefing (button or daily loop) runs
 
     @app.post("/refresh", include_in_schema=False)
     def refresh_now() -> RedirectResponse:
@@ -241,7 +248,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/refresh/wait", include_in_schema=False, response_model=None)
     def refresh_wait() -> HTMLResponse | RedirectResponse:
         thread = getattr(app.state, "refresh_thread", None)
-        if thread is None or not thread.is_alive():
+        busy = refreshing.locked() or (thread is not None and thread.is_alive())
+        if not busy:  # also covers a briefing started by the daily loop
             return RedirectResponse("/", status_code=303)
         return HTMLResponse(WAIT_PAGE)
 

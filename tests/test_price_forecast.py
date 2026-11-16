@@ -4,7 +4,8 @@ from datetime import date, timedelta
 
 import pytest
 
-from gridagent.monitor.price_forecast import History, _blocks, backtest, forecast_day
+from gridagent.monitor.hours import best_blocks
+from gridagent.monitor.price_forecast import History, backtest, forecast_day
 
 DAY = timedelta(days=1)
 FIRST, LAST = date(2026, 8, 1), date(2026, 11, 20)
@@ -64,4 +65,4 @@ def test_cheapest_and_dearest_blocks() -> None:
         19: 310.0,
         20: 305.0,
     }
-    assert _blocks(hours) == ("03:00–06:00", 11.0, "18:00–21:00", 305.0)
+    assert best_blocks(hours) == (3, 11.0, 18, 305.0)
