@@ -1,0 +1,210 @@
+{
+ "day": "2026-09-30",
+ "generated_at": "2026-11-16T21:26:47+00:00",
+ "figures": [
+  {
+   "name": "Average day-ahead price",
+   "value": 140.75,
+   "unit": "EUR / MWh",
+   "normal": 145.0,
+   "at": null
+  },
+  {
+   "name": "Highest price",
+   "value": 255.37,
+   "unit": "EUR / MWh",
+   "normal": 290.08,
+   "at": "19:45"
+  },
+  {
+   "name": "Lowest price",
+   "value": 13.33,
+   "unit": "EUR / MWh",
+   "normal": 37.95,
+   "at": "13:30"
+  },
+  {
+   "name": "Hours with negative prices",
+   "value": 0.0,
+   "unit": "h",
+   "normal": 1.28,
+   "at": null
+  },
+  {
+   "name": "Renewable share of public net generation",
+   "value": 67.74,
+   "unit": "%",
+   "normal": 64.37,
+   "at": null
+  },
+  {
+   "name": "Wind energy",
+   "value": 479.42,
+   "unit": "GWh",
+   "normal": 375.91,
+   "at": null
+  },
+  {
+   "name": "Solar energy",
+   "value": 305.57,
+   "unit": "GWh",
+   "normal": 283.31,
+   "at": null
+  },
+  {
+   "name": "Demand (load)",
+   "value": 1301.69,
+   "unit": "GWh",
+   "normal": 1224.1,
+   "at": null
+  },
+  {
+   "name": "Peak residual load (demand minus wind and solar)",
+   "value": 43.77,
+   "unit": "GW",
+   "normal": 41.96,
+   "at": null
+  },
+  {
+   "name": "Net commercial imports (+ import, - export)",
+   "value": -21.68,
+   "unit": "GWh",
+   "normal": -21.44,
+   "at": null
+  }
+ ],
+ "events": [
+  {
+   "kind": "price_dip",
+   "title": "00:00–02:00: 107.55 EUR/MWh, 52.86 below the usual 160.41 — in line with the residual load",
+   "score": 0.259,
+   "score_parts": {
+    "surprise": 0.4528442787569581,
+    "unexplained": 0.03932154509565954,
+    "size": 0.21143575000000003,
+    "duration": 0.25
+   },
+   "facts": {
+    "date": "2026-09-30",
+    "hours": "00:00–02:00",
+    "price_eur_mwh": 107.55,
+    "normal_eur_mwh": 160.41,
+    "difference_eur_mwh": -52.86,
+    "robust_z": 3.62,
+    "comparable_days": 20,
+    "residual_load_gw": 15.69,
+    "merit_order_expected_eur_mwh": 105.2,
+    "gap_to_merit_order_z": 0.24
+   },
+   "from_hour": 0,
+   "to_hour": 2,
+   "explained_by_fundamentals": true,
+   "explanation": null,
+   "explanation_steps": [],
+   "explanation_problems": []
+  }
+ ],
+ "plans": [
+  {
+   "day": "2026-10-01",
+   "mean_price": 195.18,
+   "cheapest_hours": "13:00–16:00",
+   "cheapest_price": 153.08,
+   "dearest_hours": "18:00–21:00",
+   "dearest_price": 277.58,
+   "negative_hours": 0.0,
+   "battery_profit_eur_per_mw": 375.75,
+   "hourly_prices": [
+    158.0,
+    159.62,
+    158.43,
+    159.5,
+    158.05,
+    166.63,
+    208.17,
+    237.24,
+    233.36,
+    208.3,
+    183.4,
+    160.1,
+    162.19,
+    152.02,
+    150.33,
+    156.88,
+    189.18,
+    232.28,
+    274.69,
+    300.54,
+    257.51,
+    226.41,
+    205.0,
+    186.43
+   ]
+  },
+  {
+   "day": "2026-10-02",
+   "mean_price": 200.5,
+   "cheapest_hours": "13:00–16:00",
+   "cheapest_price": 144.42,
+   "dearest_hours": "18:00–21:00",
+   "dearest_price": 284.82,
+   "negative_hours": 0.0,
+   "battery_profit_eur_per_mw": 445.93,
+   "hourly_prices": [
+    175.03,
+    163.9,
+    160.95,
+    160.06,
+    163.13,
+    177.87,
+    221.67,
+    260.33,
+    264.29,
+    225.49,
+    186.85,
+    170.07,
+    152.61,
+    140.86,
+    142.31,
+    150.1,
+    181.03,
+    224.85,
+    266.56,
+    319.81,
+    268.11,
+    229.96,
+    211.5,
+    194.7
+   ]
+  }
+ ],
+ "outlooks": [
+  {
+   "day": "2026-10-01",
+   "wind_gwh": 276.49,
+   "solar_gwh": 194.47,
+   "load_gwh": 1269.23,
+   "peak_residual_load_gw": 50.68,
+   "normal_wind_gwh": 379.48,
+   "normal_solar_gwh": 284.08,
+   "normal_load_gwh": 1226.77,
+   "headline": "276 GWh of wind expected, 27 % less than a normal day of the last four weeks"
+  },
+  {
+   "day": "2026-10-02",
+   "wind_gwh": 79.62,
+   "solar_gwh": 176.64,
+   "load_gwh": 1253.11,
+   "peak_residual_load_gw": 54.72,
+   "normal_wind_gwh": 383.88,
+   "normal_solar_gwh": 282.28,
+   "normal_load_gwh": 1225.0,
+   "headline": "80 GWh of wind expected, 79 % less than a normal day of the last four weeks"
+  }
+ ],
+ "not_available": [],
+ "sources": [
+  "Energy-Charts.info (Fraunhofer ISE)",
+  "Bundesnetzagentur | SMARD.de via Energy-Charts.info (prices)"
+ ]
+}

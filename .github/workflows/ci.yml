@@ -76,6 +76,12 @@ jobs:
           GARDEN_REPORTS_DIR: reports
         run: uv run garden eval energy_qa@0.12.0 --min-pass-rate 0.98
 
+      # Same idea for the news writer: its recorded stories pass 16/17 (94.1%).
+      - name: Replay the news writer's recorded stories (free)
+        env:
+          GARDEN_REPORTS_DIR: reports
+        run: uv run garden eval-stories news_writer@0.3.0 --min-pass-rate 0.94
+
       - name: Keep eval reports
         if: always()
         uses: actions/upload-artifact@v4

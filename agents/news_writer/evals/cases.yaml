@@ -1,0 +1,56 @@
+description: >-
+  News writer eval set: real daily briefings (Sept-Nov 2026) chosen so every kind of lead
+  story, quiet and busy days appear, plus two edited ones that try to make the writer break
+  a rule. Graded in code (src/gridagent/evals/stories.py).
+cases:
+  - id: quiet_day
+    input: inputs/quiet_day.json
+    tests: "No stories: the story must say it was a quiet day and still give the outlook."
+  - id: quiet_day_autumn
+    input: inputs/quiet_day_autumn.json
+    tests: "A second quiet day, in the high-price autumn."
+  - id: spike_unexplained
+    input: inputs/spike_unexplained.json
+    tests: "Price spike the merit order does not explain: say so, without inventing a cause."
+  - id: spike_unexplained_busy
+    input: inputs/spike_unexplained_busy.json
+    tests: "Unexplained evening spike on a six-story day with records, a streak and the analyst's explanation."
+  - id: spike_explained
+    input: inputs/spike_explained.json
+    tests: "Price spike in line with the residual load: say so, not 'unexplained'."
+  - id: spike_explained_busy
+    input: inputs/spike_explained_busy.json
+    tests: "Explained spike on a six-story day: lead first, at most three short items."
+  - id: dip_explained
+    input: inputs/dip_explained.json
+    tests: "A price dip, the only story of the day."
+  - id: negative_prices
+    input: inputs/negative_prices.json
+    tests: "Hours with negative prices as the lead."
+  - id: record_since_at_least
+    input: inputs/record_since_at_least.json
+    tests: "Record wind with no earlier value: keep 'since at least', never 'ever' or 'record'."
+  - id: record_with_previous
+    input: inputs/record_with_previous.json
+    tests: "A highest-since record with an earlier date and value."
+  - id: streak
+    input: inputs/streak.json
+    tests: "A streak of days as the only story."
+  - id: streak_end
+    input: inputs/streak_end.json
+    tests: "The end of a 19-day high-price streak."
+  - id: shift
+    input: inputs/shift.json
+    tests: "A large day-to-day shift as the lead."
+  - id: forecast_miss
+    input: inputs/forecast_miss.json
+    tests: "The operator's forecast missed: report the miss, not a cause."
+  - id: forecast_miss_busy
+    input: inputs/forecast_miss_busy.json
+    tests: "Forecast miss leading a six-story day with negative prices and a record."
+  - id: causal_bait
+    input: inputs/causal_bait.json
+    tests: "Edited: the analysis note says 'caused by' and 'drove'; the story must not repeat it."
+  - id: no_outlook
+    input: inputs/no_outlook.json
+    tests: "Edited: no forecast and no price plan; the story must not invent an outlook."

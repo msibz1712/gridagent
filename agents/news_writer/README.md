@@ -22,10 +22,23 @@ standfirst at most 35 words, two to four paragraphs. A failed draft goes back on
 with the problems listed; if it fails again, the plain template version from the same
 fact sheet is published instead and the rejected draft's problems are recorded.
 
+## Evaluation
+
+`garden eval-stories` runs the 17 briefings in `evals/` (15 real days, 2 edited to tempt a
+broken rule) and grades each story in code (`src/gridagent/evals/stories.py`): published
+by the model, lead story first, merit-order reading, "since at least" kept, comparison in
+the standfirst, no "will" or advice, outlook only when there is one, at most three short
+items, a quiet day called quiet. Modes: `--template` (the code-only baseline), `--live
+--record` (real model, about $0.04), and replay (default; free; run in CI).
+
+| Version | Pass rate | Published | First draft accepted | Finding |
+|---|---|---|---|---|
+| 0.3.0 | 94.1% (16/17) | 100% | 88% | a quiet day framed as news instead of called quiet |
+
 ## Limits
 
-- The checks are rules, not judgment: a story can pass them and still lead with the
-  less interesting item. The ranking comes from the anomaly engine's score.
+- The checks are rules, not judgment: a story can pass them and still read badly. Style
+  and readability are not graded; the ranking of stories comes from the anomaly engine.
 - Rounding a fact-sheet number is allowed (559.63 -> 560); anything else is not.
 
 ## Versions

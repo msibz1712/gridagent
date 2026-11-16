@@ -1,0 +1,182 @@
+{
+ "day": "2026-09-01",
+ "generated_at": "2026-11-16T20:43:05+00:00",
+ "figures": [
+  {
+   "name": "Average day-ahead price",
+   "value": 143.8,
+   "unit": "EUR / MWh",
+   "normal": 127.87,
+   "at": null
+  },
+  {
+   "name": "Highest price",
+   "value": 236.92,
+   "unit": "EUR / MWh",
+   "normal": 233.52,
+   "at": "20:30"
+  },
+  {
+   "name": "Lowest price",
+   "value": 22.07,
+   "unit": "EUR / MWh",
+   "normal": 31.85,
+   "at": "13:45"
+  },
+  {
+   "name": "Hours with negative prices",
+   "value": 0.0,
+   "unit": "h",
+   "normal": 1.8,
+   "at": null
+  },
+  {
+   "name": "Renewable share of public net generation",
+   "value": 71.71,
+   "unit": "%",
+   "normal": 68.6,
+   "at": null
+  },
+  {
+   "name": "Wind energy",
+   "value": 514.44,
+   "unit": "GWh",
+   "normal": 313.74,
+   "at": null
+  },
+  {
+   "name": "Solar energy",
+   "value": 329.11,
+   "unit": "GWh",
+   "normal": 337.01,
+   "at": null
+  },
+  {
+   "name": "Demand (load)",
+   "value": 1245.6,
+   "unit": "GWh",
+   "normal": 1126.78,
+   "at": null
+  },
+  {
+   "name": "Peak residual load (demand minus wind and solar)",
+   "value": 40.16,
+   "unit": "GW",
+   "normal": 39.11,
+   "at": null
+  },
+  {
+   "name": "Net commercial imports (+ import, - export)",
+   "value": -137.84,
+   "unit": "GWh",
+   "normal": -9.41,
+   "at": null
+  }
+ ],
+ "events": [],
+ "plans": [
+  {
+   "day": "2026-09-02",
+   "mean_price": 163.73,
+   "cheapest_hours": "12:00–15:00",
+   "cheapest_price": 98.37,
+   "dearest_hours": "19:00–22:00",
+   "dearest_price": 231.97,
+   "negative_hours": 0.0,
+   "battery_profit_eur_per_mw": 336.4,
+   "hourly_prices": [
+    170.72,
+    162.17,
+    153.03,
+    148.6,
+    149.23,
+    165.57,
+    194.49,
+    206.14,
+    198.01,
+    169.09,
+    136.12,
+    115.05,
+    104.33,
+    91.67,
+    99.11,
+    110.39,
+    134.44,
+    168.44,
+    196.94,
+    238.85,
+    243.2,
+    213.87,
+    194.94,
+    165.21
+   ]
+  },
+  {
+   "day": "2026-09-03",
+   "mean_price": 133.62,
+   "cheapest_hours": "13:00–16:00",
+   "cheapest_price": 23.42,
+   "dearest_hours": "19:00–22:00",
+   "dearest_price": 192.68,
+   "negative_hours": 0.0,
+   "battery_profit_eur_per_mw": 400.96,
+   "hourly_prices": [
+    178.63,
+    170.37,
+    155.53,
+    146.0,
+    143.14,
+    147.18,
+    174.44,
+    189.2,
+    180.05,
+    149.58,
+    117.66,
+    85.65,
+    50.27,
+    25.0,
+    20.89,
+    24.37,
+    61.39,
+    117.25,
+    155.15,
+    181.08,
+    204.4,
+    192.55,
+    174.88,
+    162.21
+   ]
+  }
+ ],
+ "outlooks": [
+  {
+   "day": "2026-09-02",
+   "wind_gwh": 262.08,
+   "solar_gwh": 295.76,
+   "load_gwh": 1243.29,
+   "peak_residual_load_gw": 45.65,
+   "normal_wind_gwh": 320.66,
+   "normal_solar_gwh": 336.74,
+   "normal_load_gwh": 1130.88,
+   "headline": "262 GWh of wind expected, 18 % less than a normal day of the last four weeks"
+  },
+  {
+   "day": "2026-09-03",
+   "wind_gwh": 652.01,
+   "solar_gwh": 217.27,
+   "load_gwh": 1251.97,
+   "peak_residual_load_gw": 33.55,
+   "normal_wind_gwh": 323.8,
+   "normal_solar_gwh": 334.46,
+   "normal_load_gwh": 1127.01,
+   "headline": "652 GWh of wind expected, 101 % more than a normal day of the last four weeks"
+  }
+ ],
+ "not_available": [
+  "7-day weather outlook"
+ ],
+ "sources": [
+  "Energy-Charts.info (Fraunhofer ISE)",
+  "Bundesnetzagentur | SMARD.de via Energy-Charts.info (prices)"
+ ]
+}

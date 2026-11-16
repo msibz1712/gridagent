@@ -375,6 +375,75 @@ def _report_for(target: str, model: str | None) -> EvalReport:
     return report
 
 
+@app.command("eval-stories")
+def eval_stories_command(
+    agent: Annotated[str, typer.Argument(help="news_writer or news_writer@0.3.0")] = "news_writer",
+    live: Annotated[bool, typer.Option("--live", help="Real model calls (costs money)")] = False,
+    record: Annotated[
+        bool, typer.Option("--record", help="With --live: save responses for free replay")
+    ] = False,
+    template: Annotated[
+        bool, typer.Option("--template", help="Score the code-only template (the baseline)")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip the cost confirmation")] = False,
+    min_pass_rate: Annotated[
+        float | None, typer.Option(help="Exit with code 1 if pass rate is below this (0-1)")
+    ] = None,
+    case_ids: Annotated[
+        list[str] | None, typer.Option("--case", help="Only this case id (repeatable)")
+    ] = None,
+) -> None:
+    """Evaluate the news writer's stories (replay by default: free)."""
+    from gridagent.evals.stories import (
+        StoryCaseResult,
+        StoryMode,
+        load_story_eval_set,
+        run_story_eval,
+        save_story_report,
+    )
+    from gridagent.services import build_llm
+
+    loaded = resolve(_agents_dir(), agent)
+    eval_path = loaded.directory.parent / "evals" / "cases.yaml"
+    mode: StoryMode = "live" if live else "template" if template else "replay"
+    n_cases = len(case_ids) if case_ids else len(load_story_eval_set(eval_path)[0].cases)
+    if live:
+        _require_api_key()
+        # A story costs about $0.003 (one draft); a revision doubles it. Upper end: 2 calls.
+        estimate = n_cases * 2 * 0.004
+        console.print(f"Live run: {n_cases} cases, at most about ${estimate:.2f}")
+        if not yes and not typer.confirm("Continue?"):
+            raise typer.Exit(code=1)
+
+    def show(r: StoryCaseResult) -> None:
+        mark = "[green]pass[/]" if r.passed else f"[red]fail[/] {', '.join(r.failed)}"
+        console.print(f"  {r.id:<28} {mark}")
+
+    console.print(f"Evaluating {loaded.spec} stories ({mode})")
+    try:
+        report = run_story_eval(
+            loaded, eval_path, mode, record=record, only=case_ids,
+            build_llm=lambda: build_llm(loaded.config), progress=show,
+        )  # fmt: skip
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+    path = save_story_report(report, _path("GARDEN_REPORTS_DIR", "reports"))
+    table = Table("check", "pass rate", title=f"{loaded.spec} stories, {mode}")
+    for name, rate in report.check_pass_rates.items():
+        table.add_row(name, "n/a" if rate is None else f"{100 * rate:.0f} %")
+    console.print(table)
+    console.print(
+        f"Pass rate {100 * report.pass_rate:.1f} % ({sum(c.passed for c in report.cases)}/"
+        f"{len(report.cases)}); published by the model {100 * report.published_rate:.0f} %, "
+        f"first draft accepted {100 * report.first_draft_rate:.0f} %; "
+        f"cost ${report.total_cost_usd:.4f}. Report: {path}"
+    )
+    if min_pass_rate is not None and report.pass_rate < min_pass_rate:
+        console.print(f"[red]Below the required pass rate {min_pass_rate:.0%}[/]")
+        raise typer.Exit(code=1)
+
+
 @app.command("compare")
 def compare_command(
     a: Annotated[str, typer.Argument(help="energy_qa@0.1.0 or a report .json")],

@@ -1,0 +1,280 @@
+{
+ "day": "2026-09-10",
+ "generated_at": "2026-11-16T20:47:47+00:00",
+ "figures": [
+  {
+   "name": "Average day-ahead price",
+   "value": 191.82,
+   "unit": "EUR / MWh",
+   "normal": 130.85,
+   "at": null
+  },
+  {
+   "name": "Highest price",
+   "value": 585.1,
+   "unit": "EUR / MWh",
+   "normal": 227.27,
+   "at": "19:45"
+  },
+  {
+   "name": "Lowest price",
+   "value": 62.38,
+   "unit": "EUR / MWh",
+   "normal": 36.4,
+   "at": "13:15"
+  },
+  {
+   "name": "Hours with negative prices",
+   "value": 0.0,
+   "unit": "h",
+   "normal": 1.56,
+   "at": null
+  },
+  {
+   "name": "Renewable share of public net generation",
+   "value": 54.69,
+   "unit": "%",
+   "normal": 68.97,
+   "at": null
+  },
+  {
+   "name": "Wind energy",
+   "value": 221.94,
+   "unit": "GWh",
+   "normal": 393.2,
+   "at": null
+  },
+  {
+   "name": "Solar energy",
+   "value": 298.61,
+   "unit": "GWh",
+   "normal": 301.5,
+   "at": null
+  },
+  {
+   "name": "Demand (load)",
+   "value": 1293.15,
+   "unit": "GWh",
+   "normal": 1154.69,
+   "at": null
+  },
+  {
+   "name": "Peak residual load (demand minus wind and solar)",
+   "value": 54.2,
+   "unit": "GW",
+   "normal": 37.73,
+   "at": null
+  },
+  {
+   "name": "Net commercial imports (+ import, - export)",
+   "value": 15.55,
+   "unit": "GWh",
+   "normal": -42.09,
+   "at": null
+  }
+ ],
+ "events": [
+  {
+   "kind": "price_spike",
+   "title": "18:00–21:00: 380.06 EUR/MWh, 178.56 above the usual 201.50 — more than the residual load explains",
+   "score": 0.835,
+   "score_parts": {
+    "surprise": 1.0,
+    "unexplained": 1.0,
+    "size": 0.7142544999999999,
+    "duration": 0.375
+   },
+   "facts": {
+    "date": "2026-09-10",
+    "hours": "18:00–21:00",
+    "price_eur_mwh": 380.06,
+    "normal_eur_mwh": 201.5,
+    "difference_eur_mwh": 178.56,
+    "robust_z": 12.67,
+    "comparable_days": 20,
+    "residual_load_gw": 52.15,
+    "merit_order_expected_eur_mwh": 224.5,
+    "gap_to_merit_order_z": 7.82
+   },
+   "from_hour": 18,
+   "to_hour": 21,
+   "explained_by_fundamentals": false,
+   "explanation": "The spike was caused by low wind output, and higher gas prices drove the evening peak.",
+   "explanation_steps": [],
+   "explanation_problems": []
+  },
+  {
+   "kind": "record",
+   "title": "Average day-ahead price 191.82 EUR/MWh: the highest since 24 June 2026",
+   "score": 0.412,
+   "score_parts": {
+    "span": 0.32472731693986046
+   },
+   "facts": {
+    "date": "2026-09-10",
+    "figure": "average day-ahead price",
+    "value": 191.82,
+    "unit": "EUR/MWh",
+    "direction": "highest",
+    "previous_date": "2026-06-24",
+    "previous_value": 207.84,
+    "days_spanned": 78,
+    "compared_back_to": "2024-09-10"
+   },
+   "from_hour": null,
+   "to_hour": null,
+   "explained_by_fundamentals": null,
+   "explanation": null,
+   "explanation_steps": [],
+   "explanation_problems": []
+  },
+  {
+   "kind": "record",
+   "title": "Peak residual load 54.20 GW: the highest since 24 June 2026",
+   "score": 0.412,
+   "score_parts": {
+    "span": 0.32472731693986046
+   },
+   "facts": {
+    "date": "2026-09-10",
+    "figure": "peak residual load",
+    "value": 54.2,
+    "unit": "GW",
+    "direction": "highest",
+    "previous_date": "2026-06-24",
+    "previous_value": 54.76,
+    "days_spanned": 78,
+    "compared_back_to": "2024-09-10"
+   },
+   "from_hour": null,
+   "to_hour": null,
+   "explained_by_fundamentals": null,
+   "explanation": null,
+   "explanation_steps": [],
+   "explanation_problems": []
+  },
+  {
+   "kind": "lull",
+   "title": "19:00–23:00: wind and solar covered 7.0 % of demand",
+   "score": 0.193,
+   "score_parts": {
+    "duration": 0.3333333333333333,
+    "depth": 0.2976818715900448
+   },
+   "facts": {
+    "date": "2026-09-10",
+    "hours": "19:00–23:00",
+    "wind_and_solar_share_of_demand_pct": 7.0
+   },
+   "from_hour": 19,
+   "to_hour": 23,
+   "explained_by_fundamentals": null,
+   "explanation": null,
+   "explanation_steps": [],
+   "explanation_problems": []
+  }
+ ],
+ "plans": [
+  {
+   "day": "2026-09-11",
+   "mean_price": 195.23,
+   "cheapest_hours": "12:00–15:00",
+   "cheapest_price": 136.71,
+   "dearest_hours": "18:00–21:00",
+   "dearest_price": 282.18,
+   "negative_hours": 0.0,
+   "battery_profit_eur_per_mw": 365.24,
+   "hourly_prices": [
+    184.33,
+    180.72,
+    171.4,
+    164.63,
+    167.19,
+    176.04,
+    202.76,
+    223.12,
+    214.2,
+    194.49,
+    178.22,
+    147.37,
+    132.14,
+    131.51,
+    146.46,
+    158.64,
+    181.65,
+    209.36,
+    248.49,
+    309.14,
+    288.91,
+    245.07,
+    224.97,
+    204.61
+   ]
+  },
+  {
+   "day": "2026-09-12",
+   "mean_price": 137.96,
+   "cheapest_hours": "13:00–16:00",
+   "cheapest_price": 0.14,
+   "dearest_hours": "19:00–22:00",
+   "dearest_price": 205.27,
+   "negative_hours": 2.75,
+   "battery_profit_eur_per_mw": 407.39,
+   "hourly_prices": [
+    205.28,
+    199.03,
+    196.38,
+    189.3,
+    184.23,
+    186.7,
+    193.19,
+    193.62,
+    173.83,
+    143.28,
+    89.21,
+    32.85,
+    1.0,
+    -0.05,
+    -0.24,
+    0.73,
+    34.44,
+    118.7,
+    177.94,
+    203.49,
+    210.19,
+    202.12,
+    190.97,
+    184.81
+   ]
+  }
+ ],
+ "outlooks": [
+  {
+   "day": "2026-09-11",
+   "wind_gwh": 177.47,
+   "solar_gwh": 269.38,
+   "load_gwh": 1242.69,
+   "peak_residual_load_gw": 49.84,
+   "normal_wind_gwh": 387.3,
+   "normal_solar_gwh": 301.4,
+   "normal_load_gwh": 1159.47,
+   "headline": "177 GWh of wind expected, 54 % less than a normal day of the last four weeks"
+  },
+  {
+   "day": "2026-09-12",
+   "wind_gwh": 170.25,
+   "solar_gwh": 284.76,
+   "load_gwh": 1091.11,
+   "peak_residual_load_gw": 38.53,
+   "normal_wind_gwh": 392.63,
+   "normal_solar_gwh": 295.15,
+   "normal_load_gwh": 1159.42,
+   "headline": "170 GWh of wind expected, 57 % less than a normal day of the last four weeks"
+  }
+ ],
+ "not_available": [],
+ "sources": [
+  "Energy-Charts.info (Fraunhofer ISE)",
+  "Bundesnetzagentur | SMARD.de via Energy-Charts.info (prices)"
+ ]
+}

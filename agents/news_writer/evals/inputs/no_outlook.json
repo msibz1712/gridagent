@@ -1,0 +1,162 @@
+{
+ "day": "2026-09-22",
+ "generated_at": "2026-11-16T21:08:09+00:00",
+ "figures": [
+  {
+   "name": "Average day-ahead price",
+   "value": 226.18,
+   "unit": "EUR / MWh",
+   "normal": 132.07,
+   "at": null
+  },
+  {
+   "name": "Highest price",
+   "value": 647.5,
+   "unit": "EUR / MWh",
+   "normal": 254.44,
+   "at": "19:15"
+  },
+  {
+   "name": "Lowest price",
+   "value": 112.14,
+   "unit": "EUR / MWh",
+   "normal": 33.94,
+   "at": "13:45"
+  },
+  {
+   "name": "Hours with negative prices",
+   "value": 0.0,
+   "unit": "h",
+   "normal": 1.76,
+   "at": null
+  },
+  {
+   "name": "Renewable share of public net generation",
+   "value": 49.24,
+   "unit": "%",
+   "normal": 68.32,
+   "at": null
+  },
+  {
+   "name": "Wind energy",
+   "value": 108.1,
+   "unit": "GWh",
+   "normal": 449.86,
+   "at": null
+  },
+  {
+   "name": "Solar energy",
+   "value": 322.99,
+   "unit": "GWh",
+   "normal": 278.73,
+   "at": null
+  },
+  {
+   "name": "Demand (load)",
+   "value": 1267.94,
+   "unit": "GWh",
+   "normal": 1205.58,
+   "at": null
+  },
+  {
+   "name": "Peak residual load (demand minus wind and solar)",
+   "value": 55.53,
+   "unit": "GW",
+   "normal": 37.91,
+   "at": null
+  },
+  {
+   "name": "Net commercial imports (+ import, - export)",
+   "value": 61.46,
+   "unit": "GWh",
+   "normal": -57.73,
+   "at": null
+  }
+ ],
+ "events": [
+  {
+   "kind": "price_spike",
+   "title": "18:00–21:00: 468.12 EUR/MWh, 234.43 above the usual 233.69 — more than the residual load explains",
+   "score": 0.874,
+   "score_parts": {
+    "surprise": 1.0,
+    "unexplained": 0.9346192300186931,
+    "size": 0.9377093333333334,
+    "duration": 0.375
+   },
+   "facts": {
+    "date": "2026-09-22",
+    "hours": "18:00–21:00",
+    "price_eur_mwh": 468.12,
+    "normal_eur_mwh": 233.69,
+    "difference_eur_mwh": 234.43,
+    "robust_z": 9.78,
+    "comparable_days": 20,
+    "residual_load_gw": 53.01,
+    "merit_order_expected_eur_mwh": 300.37,
+    "gap_to_merit_order_z": 5.61
+   },
+   "from_hour": 18,
+   "to_hour": 21,
+   "explained_by_fundamentals": false,
+   "explanation": null,
+   "explanation_steps": [],
+   "explanation_problems": []
+  },
+  {
+   "kind": "shift",
+   "title": "Average day-ahead price rose by 129.58 EUR/MWh in one day, to 226.18",
+   "score": 0.549,
+   "score_parts": {
+    "surprise": 0.4979281480930964
+   },
+   "facts": {
+    "date": "2026-09-22",
+    "figure": "average day-ahead price",
+    "unit": "EUR/MWh",
+    "value": 226.18,
+    "previous_day_value": 96.6,
+    "change": 129.58,
+    "robust_z": 4.99,
+    "days_with_a_larger_change": 1,
+    "days_compared": 729
+   },
+   "from_hour": null,
+   "to_hour": null,
+   "explained_by_fundamentals": null,
+   "explanation": null,
+   "explanation_steps": [],
+   "explanation_problems": []
+  },
+  {
+   "kind": "lull",
+   "title": "19:00–24:00: wind and solar covered 5.3 % of demand",
+   "score": 0.261,
+   "score_parts": {
+    "duration": 0.4166666666666667,
+    "depth": 0.47062819593444266
+   },
+   "facts": {
+    "date": "2026-09-22",
+    "hours": "19:00–24:00",
+    "wind_and_solar_share_of_demand_pct": 5.3
+   },
+   "from_hour": 19,
+   "to_hour": 24,
+   "explained_by_fundamentals": null,
+   "explanation": null,
+   "explanation_steps": [],
+   "explanation_problems": []
+  }
+ ],
+ "plans": [],
+ "outlooks": [],
+ "not_available": [
+  "day-ahead forecast",
+  "price plan for today and tomorrow"
+ ],
+ "sources": [
+  "Energy-Charts.info (Fraunhofer ISE)",
+  "Bundesnetzagentur | SMARD.de via Energy-Charts.info (prices)"
+ ]
+}

@@ -11,7 +11,7 @@ is checked automatically on every answer and every story.
 **At a glance:** 2 agents (analyst and news writer) · 20 tools · 73-question eval set ·
 **97.3%** live pass rate on the latest version (93.6–98.3% on every version since 0.4.0) ·
 **100%** of out-of-scope questions declined · about **$0.001 and 9 s per question**, about
-**$0.005 per daily briefing** · 538 tests · CI that replays real model answers for free ·
+**$0.005 per daily briefing** · news writer: **94.1%** on 17 graded stories · 560 tests · CI that replays real model answers for free ·
 Docker · PostgreSQL (Supabase) with history since 2018 · runs on your own machine.
 
 ---
@@ -131,10 +131,29 @@ values are recomputed **independently** from the raw data in the tests.
 
 0.12.0: answer accuracy 98.3%, refusals and source citation 100%, $0.0816 for 73 questions,
 median 8.8 s. The recorded answers replay at 98.6% after the fix; CI re-checks them on
-every push. The news writer was checked on real days too: its first live stories found a
-token limit that cut a draft after the headline, paragraphs that turned into lists of
-numbers, "sets a record" for "highest since at least", and mentions of its own inputs.
-Each is now a rule in the desk check.
+every push.
+
+**The news writer has its own eval** (`garden eval-stories`): 17 briefings, 15 real days
+chosen so every kind of lead story appears, quiet and busy days included, plus 2 edited to
+tempt it into a broken rule (an analysis note that says "caused by"; a missing forecast).
+The desk check only rejects broken rules; the eval asks what an editor asks next, graded in
+code: does it lead with the lead story, read the merit-order result the right way round,
+keep "since at least", give each number its comparison, avoid "will" and advice, look
+ahead only when there is a forecast, and call a quiet day quiet?
+
+| | Pass rate | Published by the model | First draft accepted | Cost |
+|---|---|---|---|---|
+| Template (code only, the baseline) | 100% | – | – | free |
+| **news_writer 0.3.0** (Haiku 5.5) | **94.1%** (16/17) | 100% | 88% | $0.042 for 17 |
+
+The model has to match the template's correctness while writing better; it does on 16 of
+17. The miss is real: a day without stories framed as news ("price falls 8.8 %") instead
+of called quiet. Reading the first run also showed three checks that were too narrow
+("a third day", "7.9 % below its forecast", a plan day named only by weekday); each was
+widened with a test. CI replays the recorded stories on every push. Its earlier live
+stories found a token limit that cut a draft after the headline, paragraphs that turned
+into lists of numbers, "sets a record" for "highest since at least", and mentions of its
+own inputs; each is now a rule in the desk check.
 
 **How far ahead is the weather forecast useful?** Measured, not assumed (`garden
 forecast-skill`, Sep–Nov 2026, daily forecast against actual daily output):
@@ -218,6 +237,7 @@ uv run garden chat energy_qa
 uv run garden eval energy_qa                                      # replay if recorded, else oracle
 uv run garden eval energy_qa --live --record --max-cost 0.15      # real model, hard limit
 uv run garden compare energy_qa@0.10.0 energy_qa@0.12.0
+uv run garden eval-stories [--template | --live --record]         # news writer (replay: free)
 uv run garden runs                                                # monitoring of logged runs
 
 # Plant register (Marktstammdatenregister)
@@ -253,7 +273,7 @@ writes a balanced municipality × year panel for research.
 
 ```
 agents/energy_qa/        analyst agent: versions (agent.yaml + system prompt), evals.yaml, recordings
-agents/news_writer/      news-writer agent: versions and the newsroom style guide
+agents/news_writer/      news-writer agent: versions, the newsroom style guide, story evals
 src/gridagent/agent/     tool-use loop, conversations, run logs
 src/gridagent/tools/     tool definitions, ToolBox, statistics, investigator, battery, register, grounding
 src/gridagent/monitor/   daily briefing: figures, anomaly engine, forecasts, outlook, explanations, writer, captions

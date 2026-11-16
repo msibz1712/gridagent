@@ -1,0 +1,210 @@
+{
+ "day": "2026-09-02",
+ "generated_at": "2026-11-16T20:43:36+00:00",
+ "figures": [
+  {
+   "name": "Average day-ahead price",
+   "value": 163.73,
+   "unit": "EUR / MWh",
+   "normal": 127.66,
+   "at": null
+  },
+  {
+   "name": "Highest price",
+   "value": 251.31,
+   "unit": "EUR / MWh",
+   "normal": 231.14,
+   "at": "19:45"
+  },
+  {
+   "name": "Lowest price",
+   "value": 86.61,
+   "unit": "EUR / MWh",
+   "normal": 30.1,
+   "at": "13:45"
+  },
+  {
+   "name": "Hours with negative prices",
+   "value": 0.0,
+   "unit": "h",
+   "normal": 1.8,
+   "at": null
+  },
+  {
+   "name": "Renewable share of public net generation",
+   "value": 63.54,
+   "unit": "%",
+   "normal": 68.75,
+   "at": null
+  },
+  {
+   "name": "Wind energy",
+   "value": 256.27,
+   "unit": "GWh",
+   "normal": 323.8,
+   "at": null
+  },
+  {
+   "name": "Solar energy",
+   "value": 334.4,
+   "unit": "GWh",
+   "normal": 334.46,
+   "at": null
+  },
+  {
+   "name": "Demand (load)",
+   "value": 1276.49,
+   "unit": "GWh",
+   "normal": 1127.01,
+   "at": null
+  },
+  {
+   "name": "Peak residual load (demand minus wind and solar)",
+   "value": 47.95,
+   "unit": "GW",
+   "normal": 38.85,
+   "at": null
+  },
+  {
+   "name": "Net commercial imports (+ import, - export)",
+   "value": 49.19,
+   "unit": "GWh",
+   "normal": -17.52,
+   "at": null
+  }
+ ],
+ "events": [
+  {
+   "kind": "forecast_miss",
+   "title": "Solar came in 13.1 % above its day-ahead forecast: 334.40 vs 295.76 GWh",
+   "score": 0.402,
+   "score_parts": {
+    "surprise": 0.2540348347034247,
+    "size": 0.12880533333333327
+   },
+   "facts": {
+    "date": "2026-09-02",
+    "figure": "solar",
+    "actual_gwh": 334.4,
+    "forecast_gwh": 295.76,
+    "miss_gwh": 38.64,
+    "miss_pct": 13.1,
+    "robust_z": 4.02,
+    "days_compared": 28,
+    "largest_hourly_gap_mw": 5823.0,
+    "largest_gap_hour": "14:00"
+   },
+   "from_hour": null,
+   "to_hour": null,
+   "explained_by_fundamentals": null,
+   "explanation": null,
+   "explanation_steps": [],
+   "explanation_problems": []
+  }
+ ],
+ "plans": [
+  {
+   "day": "2026-09-03",
+   "mean_price": 133.62,
+   "cheapest_hours": "13:00–16:00",
+   "cheapest_price": 23.42,
+   "dearest_hours": "19:00–22:00",
+   "dearest_price": 192.68,
+   "negative_hours": 0.0,
+   "battery_profit_eur_per_mw": 400.96,
+   "hourly_prices": [
+    178.63,
+    170.37,
+    155.53,
+    146.0,
+    143.14,
+    147.18,
+    174.44,
+    189.2,
+    180.05,
+    149.58,
+    117.66,
+    85.65,
+    50.27,
+    25.0,
+    20.89,
+    24.37,
+    61.39,
+    117.25,
+    155.15,
+    181.08,
+    204.4,
+    192.55,
+    174.88,
+    162.21
+   ]
+  },
+  {
+   "day": "2026-09-04",
+   "mean_price": 88.95,
+   "cheapest_hours": "13:00–16:00",
+   "cheapest_price": -0.1,
+   "dearest_hours": "06:00–09:00",
+   "dearest_price": 159.09,
+   "negative_hours": 3.75,
+   "battery_profit_eur_per_mw": 348.41,
+   "hourly_prices": [
+    135.74,
+    124.83,
+    117.63,
+    117.97,
+    115.52,
+    123.18,
+    152.58,
+    166.31,
+    158.37,
+    104.23,
+    57.84,
+    10.95,
+    -0.0,
+    -0.06,
+    -0.14,
+    -0.1,
+    -0.02,
+    36.91,
+    107.85,
+    135.1,
+    136.21,
+    128.41,
+    114.19,
+    91.35
+   ]
+  }
+ ],
+ "outlooks": [
+  {
+   "day": "2026-09-03",
+   "wind_gwh": 652.01,
+   "solar_gwh": 217.27,
+   "load_gwh": 1251.97,
+   "peak_residual_load_gw": 33.55,
+   "normal_wind_gwh": 321.47,
+   "normal_solar_gwh": 334.45,
+   "normal_load_gwh": 1132.17,
+   "headline": "652 GWh of wind expected, 103 % more than a normal day of the last four weeks"
+  },
+  {
+   "day": "2026-09-04",
+   "wind_gwh": 824.7,
+   "solar_gwh": 256.77,
+   "load_gwh": 1235.51,
+   "peak_residual_load_gw": 20.39,
+   "normal_wind_gwh": 321.03,
+   "normal_solar_gwh": 332.49,
+   "normal_load_gwh": 1129.38,
+   "headline": "825 GWh of wind expected, 157 % more than a normal day of the last four weeks"
+  }
+ ],
+ "not_available": [
+  "7-day weather outlook"
+ ],
+ "sources": [
+  "Energy-Charts.info (Fraunhofer ISE)",
+  "Bundesnetzagentur | SMARD.de via Energy-Charts.info (prices)"
+ ]
+}
