@@ -109,8 +109,9 @@ def test_the_eval_set_loads_and_the_template_baseline_runs() -> None:
 
 
 def test_replay_of_the_recorded_live_run_is_stable() -> None:
-    agent = resolve(AGENTS, "news_writer@0.3.0")
-    report = run_story_eval(agent, EVAL_SET, "replay")
+    for version in ("0.3.0", "0.4.0"):  # both recorded live runs, scored with today's checks
+        report = run_story_eval(resolve(AGENTS, f"news_writer@{version}"), EVAL_SET, "replay")
+        assert report.pass_rate >= 0.94
     assert report.total_cost_usd > 0 and all(c.model_calls >= 1 for c in report.cases)
 
 
@@ -145,3 +146,8 @@ def test_looking_ahead_means_naming_a_forecast_day(briefing) -> None:
         ]
     )
     assert story_checks(ahead, briefing)["outlook"] is True
+
+
+def test_a_change_from_the_day_before_is_a_comparison(briefing) -> None:
+    story = good(standfirst="Solar fell 143.38 GWh, to 206.88 GWh from 350.26 the day before.")
+    assert story_checks(story, briefing)["comparison"] is True

@@ -63,18 +63,10 @@ CHECK_NAMES = ("published", "lead_first", "price_reading", "since_at_least", "co
 # Fact values that are statistics about the comparison, not news a reader would see.
 NOT_ANCHORS = {"robust_z", "gap_to_merit_order_z", "comparable_days", "days_spanned",
                "days_compared", "days_with_a_larger_change"}  # fmt: skip
-COMPARISON_WORDS = (
-    "against",
-    "normal",
-    "usual",
-    "compared",
-    "than",
-    "since",
-    "average",
-    "above",
-    "below",
-    "forecast",
-)  # "7.9 % below its forecast of 811.76"
+# A number with what it is compared with: "against 130.68", "7.9 % below its forecast of
+# 811.76", "to 206.88 from 350.26 the day before".
+COMPARISON_WORDS = ("against", "normal", "usual", "compared", "than", "since", "average",
+                    "above", "below", "forecast", "day before", "previous day")  # fmt: skip
 # Small counts are often written as words ("a third day in a row"). Index = the number.
 CARDINALS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
              "ten", "eleven", "twelve")  # fmt: skip

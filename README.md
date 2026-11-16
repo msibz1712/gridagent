@@ -144,13 +144,19 @@ ahead only when there is a forecast, and call a quiet day quiet?
 | | Pass rate | Published by the model | First draft accepted | Cost |
 |---|---|---|---|---|
 | Template (code only, the baseline) | 100% | – | – | free |
-| **news_writer 0.3.0** (Haiku 5.5) | **94.1%** (16/17) | 100% | 88% | $0.042 for 17 |
+| news_writer 0.3.0 (Haiku 5.5) | 94.1% (16/17) | 100% | 88% | $0.042 for 17 |
+| **news_writer 0.4.0** | **94.1%** (16/17) | 100% | 82% | $0.046 for 17 |
 
-The model has to match the template's correctness while writing better; it does on 16 of
-17. The miss is real: a day without stories framed as news ("price falls 8.8 %") instead
-of called quiet. Reading the first run also showed three checks that were too narrow
-("a third day", "7.9 % below its forecast", a plan day named only by weekday); each was
-widened with a test. CI replays the recorded stories on every push. Its earlier live
+The model has to match the template's correctness while writing better. 0.3.0's miss was
+real: a day without stories framed as news ("Average price falls 8.8% below normal")
+instead of called quiet. 0.4.0 adds one rule for it, and the same day now reads "Prices
+run below normal on a quiet Saturday". It missed a different case instead: on one day it
+led with the daily average rather than the evening spike the analysis ranked first, a case
+0.3.0 got right. With 17 stories and one run each, the two versions score the same; the
+fix is shown, an overall improvement is not. Reading the runs also showed four checks that
+were too narrow ("a third day", "7.9 % below its forecast", "from 350.26 the day before",
+a plan day named only by weekday); each was widened with a test, and both versions were
+re-scored with the same checks. CI replays the recorded stories on every push. Its earlier live
 stories found a token limit that cut a draft after the headline, paragraphs that turned
 into lists of numbers, "sets a record" for "highest since at least", and mentions of its
 own inputs; each is now a rule in the desk check.

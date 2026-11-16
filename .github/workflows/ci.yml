@@ -80,7 +80,7 @@ jobs:
       - name: Replay the news writer's recorded stories (free)
         env:
           GARDEN_REPORTS_DIR: reports
-        run: uv run garden eval-stories news_writer@0.3.0 --min-pass-rate 0.94
+        run: uv run garden eval-stories news_writer@0.4.0 --min-pass-rate 0.94
 
       - name: Keep eval reports
         if: always()

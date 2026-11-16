@@ -1,0 +1,16 @@
+name: news_writer
+version: 0.4.0
+description: Writes the daily GridAgent briefing as a short news story from a fact sheet of calculated figures, under a newsroom style guide; every number is checked.
+owner: msibz1712
+model:
+  name: claude-haiku-5-5  # short, structured writing; cheap enough for every morning
+  max_tokens: 8000  # 0.2.0: 2000 ran out while thinking (live run, 15 Nov)
+  effort: medium
+  refusal_fallback: false
+tools: []  # works only from its input; the story is returned through `publish_story`
+limits:
+  max_steps: 2  # one draft, one revision after a failed check
+  model_timeout_seconds: 60
+  model_max_retries: 2
+  run_timeout_seconds: 120
+system_prompt_file: system_prompt.md
