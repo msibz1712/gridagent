@@ -1,121 +1,123 @@
 # GridAgent
 
-An AI agent that answers research questions about Germany's electricity system:
-generation, prices, cross-border trade, the weather behind them, and how they relate.
-Every number comes from public data and deterministic code, never from the model's
-memory or mental arithmetic, and that is checked automatically on every answer.
+A personal market monitor for Germany's electricity system, built on evaluated AI agents.
+Every morning it reviews the previous day, finds what was unusual, explains it, looks a
+week ahead, and lets you ask follow-up questions in a chat. Every number comes from public
+data and deterministic code, never from the model's memory or mental arithmetic, and that
+is checked automatically on every answer and every story.
 
-> **Q:** In October 2026, how did the day-ahead price in hours with little wind compare with windy hours?
->
-> **A:** In October 2026 (1–31 Oct, German local time), the day-ahead price in hours with
-> little wind (station wind below 3 m/s) averaged 214.84 EUR/MWh over 304 hours. In windy
-> hours (above 5 m/s) it averaged 62.61 EUR/MWh over 144 hours, a difference of
-> 152.23 EUR/MWh (ratio 3.43). These are my thresholds, not official definitions. The
-> results show an association only; demand, gas prices and imports also shape prices. Wind
-> is a station indicator at about 10 m height, not turbine hub-height wind, and the
-> calculation uses hourly means.
->
-> *Source: Bundesnetzagentur | SMARD.de via Energy-Charts.info (day-ahead prices, CC BY 4.0);
-> Deutscher Wetterdienst (DWD), 65 stations (wind speed)*
+![The dashboard: yesterday's story, key figures against their four-week normal](docs/images/dashboard.png)
 
-*(Unedited answer from a live evaluation run of agent 0.7.0 on Claude Haiku 5.5: it fetched
-prices and weather, ran four conditional calculations and one comparison, all in code.)*
-
-**At a glance:** 16 tools · 68-question eval set · **95–98%** live pass rate on the
-latest versions · **100%** of out-of-scope questions declined correctly · about **$0.001
-and 7 s per question** · 439 tests · CI with free replay of real model answers · Docker · PostgreSQL
-(Supabase) with 1.5 million rows since 2018.
+**At a glance:** 2 agents (analyst and news writer) · 20 tools · 73-question eval set ·
+**97.3%** live pass rate on the latest version (93.6–98.3% on every version since 0.4.0) ·
+**100%** of out-of-scope questions declined · about **$0.001 and 9 s per question**, about
+**$0.005 per daily briefing** · 538 tests · CI that replays real model answers for free ·
+Docker · PostgreSQL (Supabase) with history since 2018 · runs on your own machine.
 
 ---
 
 ## Why
 
-Germany publishes excellent electricity data (Energy-Charts, SMARD, DWD), but answering
-a question like *"what did solar power earn in October, and how does that compare with
-the official market value?"* still means downloading data, handling 15-minute values,
-daylight-saving days and changing definitions, and calculating carefully. That takes an
-analyst 30–60 minutes. GridAgent answers in seconds, states its definitions and sources,
-and shows how it calculated. It is built for researchers, consultants and analysts.
+Germany publishes excellent electricity data (Energy-Charts, SMARD, DWD, the plant register),
+but turning it into "what happened yesterday, was it unusual, and why?" still means
+downloading data, handling 15-minute values, daylight-saving days and changing definitions,
+and calculating carefully: 30–60 minutes for an analyst. GridAgent does it every morning
+and states its definitions and sources. The main risk with AI here is a confident, wrong
+number; the design is about preventing exactly that.
 
-The main risk with AI in this domain is a confident, wrong number. The design is about
-preventing exactly that.
+## What you get
 
-## What it can answer
+**A dashboard** at `http://localhost:8000`, rebuilt every morning:
 
-| Area | Example question | Data |
-|---|---|---|
-| Generation and demand | "What share of electricity came from wind last week?" | Energy-Charts (public and total net generation) |
-| Prices and market values | "What did solar earn in October, compared with the official value?" | SMARD via Energy-Charts; official values from netztransparenz |
-| Cross-border trade | "How much did Germany import, physically vs commercially?" | Energy-Charts (physical flows and scheduled exchanges) |
-| Neighbouring markets | "In how many hours was France cheaper, and what did Germany import then?" | Day-ahead prices of the 11 neighbouring zones (CC BY 4.0) |
-| Regions | "How much solar did the TenneT control area produce?" | SMARD control-area data |
-| Capacity | "What was the onshore wind capacity factor in October?" | Energy-Charts installed capacity |
-| Weather and its effects | "How many hours had neither wind nor sun, and how much gas ran then?" | DWD station observations (65 stations) |
-| Grid congestion | "How much renewable power was curtailed by redispatch, and in which hours?" | netztransparenz.de (TSOs' redispatch measures; own account, see licences) |
-| Flexibility | "What could a 10 MW / 20 MWh battery have earned last week?" · "When is it cheapest to run 20 MWh?" | Day-ahead prices; exact day-by-day optimisation in code |
-| Plant register | "How much wind was added in NRW districts since 2023?" · "Which district has the most lignite?" | Marktstammdatenregister (every unit in Germany; by state, district, municipality, year) |
-| Official statistics | "What was the official renewable share in 2025?" | UBA, BDEW / AGEB (curated, with status: final, preliminary, reported) |
+| Section | What it shows |
+|---|---|
+| Story | Yesterday's lead story, written by the news-writer agent from calculated figures and checked number by number (labelled as AI-written; one click to the full text) |
+| Key figures | Price, renewable share, wind, peak residual load, each against its four-week normal with a trend line |
+| Today | Hourly day-ahead prices, the cheapest and dearest three hours, what a 1 MW / 2 MWh battery could earn |
+| The week ahead | Expected wind and solar energy and temperature for seven days, each labelled *reliable* or *rough indication* from measured forecast accuracy |
+| The last four weeks | Price and wind, day by day |
+| What stood out | Price spikes and dips (explained by residual load, or not), records, streaks, unusual changes, forecast misses |
+| NRW | New onshore wind per year, installed wind, solar, batteries and lignite, the districts building most |
 
-It declines what it should not do: forecasts, investment or trading advice, other
-countries' domestic systems, and anything off-topic. Follow-up questions ("And the week
-before?", "How does that compare with solar?") build on the conversation.
+![Today: hourly prices with the cheapest and dearest hours](docs/images/dashboard-today.png)
+![The week ahead, with the reliability of each day](docs/images/dashboard-week.png)
+
+**A chat** in the same design (`/ask`), for any question the dashboard raises:
+
+![The chat](docs/images/chat.png)
+
+| Area | Example question |
+|---|---|
+| Generation, demand, prices | "What share of electricity came from wind last week?" · "What did solar earn in October, compared with the official value?" |
+| Why | "Why were prices so high on Thursday evening?" (merit-order estimate against comparable days) |
+| Forecasts | "How windy will it be on Thursday?" · "How good was yesterday's wind forecast?" |
+| What stood out | "What was unusual on 29 October?" (the same analysis as the dashboard) |
+| Neighbours and flows | "In how many hours was France cheaper, and what did Germany import then?" |
+| Weather | "How many hours had neither wind nor sun, and how much gas ran then?" |
+| Flexibility | "What could a 10 MW / 20 MWh battery have earned last week?" |
+| Power plants | "How much onshore wind was added in NRW districts since 2023?" |
+| Official figures | "What was the official renewable share in 2025?" |
+
+It reports published forecasts with their reliability but makes no predictions of its own,
+gives no investment or trading advice, and declines anything off-topic. Follow-up questions
+build on the conversation.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    Q[Question] --> M["Claude (Haiku 5.5)<br/>decides which data<br/>and which calculation"]
-    M -- tool calls --> T["16 tools<br/>(fetch · compute · compare)"]
-    T --> D[("Supabase / PostgreSQL<br/>history since 2018")]
-    T --> L["Live APIs<br/>Energy-Charts · SMARD · DWD<br/>netztransparenz (OAuth)"]
-    T --> R[("Plant register<br/>MaStR aggregate")]
-    D -. not synced or unreachable .-> L
-    T -- "small results + refs" --> M
-    M --> A["Answer with definitions,<br/>period and sources"]
-    A --> G{"Grounding check:<br/>is every number<br/>backed by a tool result?"}
-    G --> LOG[(Run log · monitoring)]
+    subgraph Morning["Every morning (or Refresh)"]
+      D1[(Data: database + live APIs)] --> F["Key figures<br/>vs 4-week normal"]
+      D1 --> AN["Anomaly engine<br/>robust normal · merit order<br/>records · streaks · forecast misses"]
+      D1 --> W["7-day outlook<br/>Open-Meteo, calibrated"]
+      AN --> X["Analyst agent<br/>explains the top price events"]
+      F & AN & W & X --> S["Fact sheet"] --> NW["News-writer agent"] --> DC{"Desk check<br/>every number backed?<br/>no causal claims, no hype"}
+      DC -- pass --> P[Dashboard]
+      DC -- fail twice --> T["Template story<br/>(code)"] --> P
+    end
+    subgraph Chat
+      Q[Question] --> M["Analyst agent (Claude Haiku 5.5)<br/>chooses data and calculation"]
+      M -- tool calls --> TL["20 tools<br/>fetch · compute · compare"] --> M
+      M --> G{"Grounding check"} --> A[Answer + method + sources]
+    end
 ```
 
 Design decisions, and why:
 
-- **The model decides, code calculates.** Claude chooses the data and the operation;
-  `compute_stats`, `compute_when` and `compare_values` do every sum, share, price
-  weighting, conditional average and difference. The model is told not to calculate,
-  and `compare_values` only accepts numbers that earlier tool results produced.
-- **Data stays on the server.** A month of 15-minute data is thousands of values. Tools
-  store it behind a short `ref` (e.g. `gen_1`) and return only a summary, so prompts stay
-  small (cheap, cacheable) and the model cannot mis-copy raw numbers.
-- **Every answer is checked.** After each run, every number in the answer must match a
-  tool result (allowing normal rounding and ×1000 unit changes). Unbacked numbers are
-  written to the run log and counted in monitoring (`garden runs`), in production and in
-  evaluations alike (`src/gridagent/tools/grounding.py`).
-- **Definitions are explicit.** Public vs total net generation, physical vs commercial
-  flows, AC vs DC solar capacity, quarter-hour vs hourly counts, preliminary vs final
-  official figures: the agent states which one it used, because researchers compare.
-- **Honest about weather.** Station wind is measured ~10 m above ground and averaged over
-  65 stations: the agent calls it an indicator, states its thresholds, and reports an
-  association, not a cause.
-- **Versioned agents.** Each agent version is a folder (`agent.yaml` + system prompt) in a
-  small registry, the "Agent Garden", and every version is evaluated on the same questions.
+- **The model decides, code calculates.** The agents choose data and operations; tools do
+  every sum, share, weighting, comparison and optimisation. Tools return the derived numbers
+  a reader wants (shares, spreads, differences), because live runs showed that models
+  otherwise work them out in their heads.
+- **Every number is checked.** After each answer and each story, every number must match a
+  tool result or the fact sheet (normal rounding and ×1000 unit changes allowed). Answers
+  log unbacked numbers; stories that fail are rewritten once, then replaced by a plain
+  template version. A wrong story is never published.
+- **News judgment in code, writing by the model.** The anomaly engine ranks candidate stories
+  by surprise, size, duration and context. Price spikes are tested against a curved merit
+  order fitted on four weeks: a spike the residual load predicts is *explained*; one it does
+  not is the real news.
+- **Forecasts with measured reliability.** The weather outlook's accuracy was measured for
+  each lead time before it was shown (see below), and every day carries that label.
+- **Data stays on the server.** Tools keep large series behind short refs (`gen_1`) and send
+  the model only summaries: cheap, cacheable, and nothing to mis-copy.
+- **Versioned agents.** Each version is a folder (`agent.yaml` + system prompt) in a small
+  registry, the "Agent Garden", evaluated on the same questions.
 
 ## How we know it works
 
-**Three evaluation modes** on a fixed data world (recorded data, fixed "today"), so results
-are reproducible:
+**Three evaluation modes** on a fixed data world (recorded data, fixed "today"):
 
 | Mode | What it tests | Cost |
 |---|---|---|
 | Oracle | A scripted perfect agent: do tools, scoring and eval set agree? | free |
-| Live | The real model on all questions (hard cost limit, `--max-cost`) | ~$0.05 per run |
+| Live | The real model on all questions (hard cost limit, `--max-cost`) | ~$0.08 per run |
 | Replay | Recorded real answers re-checked against today's code (runs in CI) | free |
 
-Each answer is scored on explicit rules: the expected numbers (±1%), whether those numbers
-appear in tool results, whether *every* number is backed, dates, tool use, refusals,
-missing-data handling and source citation. Expected values are recomputed **independently**
-from the raw data in the tests, so a bug in the tools cannot hide in the eval set.
+Each answer is scored on explicit rules: expected numbers (±1%), whether *every* number is
+backed, dates, tool use, refusals, missing-data handling and source citation. Expected
+values are recomputed **independently** from the raw data in the tests.
 
-**Live results on Claude Haiku 5.5** (same questions; later versions add questions for
-their new features):
+**Live results on Claude Haiku 5.5** (later versions add questions for their new features):
 
 | Version | Change | Questions | Live pass rate | What the evaluation found |
 |---|---|---|---|---|
@@ -123,94 +125,102 @@ their new features):
 | 0.5.0 | `compare_values` + grounding check | 50 | 96.0% | follow-up differences still mental |
 | 0.6.0 | DWD weather, `compute_when` | 55 | 94.5% (98.2% after test fixes) | the eval itself was too strict once |
 | 0.7.0 | neighbouring markets, follow-up rule | 59 | 98.3% | one count used hourly averages instead of 15-minute prices |
-| 0.8.0 | grid congestion (redispatch) | 62 | 95.0% (60 run before the cost limit) | a flipped price-spread sign in a follow-up; tools now spell signs out, and the re-run got it right |
-| 0.10.0 | battery and flexible load (0.9.0), plant register | 68 | 95.6% | two shares worked out mentally ("42 % of the state"); the tools now return shares, and the re-run used them |
-| **0.12.0** | price-event investigator (0.11.0), forecasts, 7-day outlook, notable events | **73** | **97.3%** | a buy/sell spread worked out mentally (the battery tool now returns it); one investigation that never named its date |
+| 0.8.0 | grid congestion (redispatch) | 62 | 95.0% | a flipped price-spread sign in a follow-up; tools now spell signs out |
+| 0.10.0 | battery and flexible load, plant register | 68 | 95.6% | two shares worked out mentally; the tools now return shares |
+| **0.12.0** | price-event investigator, forecasts, 7-day outlook, notable events | **73** | **97.3%** | a buy/sell spread worked out mentally (now returned by the tool); one investigation that never named its date |
 
-In 0.10.0 all six new questions (battery, flexible load, plant register) passed or were
-fixed on re-run; the three failures were two shares calculated mentally, caught only by the
-grounding check (the numbers themselves were right), and one correct "no data" answer in
-words the grader did not know yet. Refusals and source citation were 100%. The run cost
-$0.069 for 68 questions ($0.0010 each; prompt caching, Haiku), median latency 7 s. After
-the fixes, the recorded answers replay at 100%; CI re-checks them on every push.
+0.12.0: answer accuracy 98.3%, refusals and source citation 100%, $0.0816 for 73 questions,
+median 8.8 s. The recorded answers replay at 98.6% after the fix; CI re-checks them on
+every push. The news writer was checked on real days too: its first live stories found a
+token limit that cut a draft after the headline, paragraphs that turned into lists of
+numbers, "sets a record" for "highest since at least", and mentions of its own inputs.
+Each is now a rule in the desk check.
+
+**How far ahead is the weather forecast useful?** Measured, not assumed (`garden
+forecast-skill`, Sep–Nov 2026, daily forecast against actual daily output):
+
+| Days ahead | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| Wind (r) | 0.97 | 0.96 | 0.94 | 0.92 | 0.79 | 0.73 | 0.66 |
+| Solar (r) | 0.97 | 0.96 | 0.94 | 0.93 | 0.87 | 0.81 | 0.85 |
+
+For tomorrow, the grid operators' own forecast is better still (r 0.993) and is used instead.
 
 Things the evaluations and checks caught along the way, each now covered by a test: mental
-arithmetic in answers; a misrounded expected answer in the eval set itself; a 4×
-undercount of negative-price hours for years with hourly prices; two daylight-saving bugs
-(the repeated hour when clocks go back); data sources that would have returned German
-prices for a French request; a price-spread sign read the wrong way round; tool schemas the
-API rejects (once an unsupported keyword, later the limits on nullable parameters and on the
-combined grammar of strict tools: the API refused before the model ran, so it cost nothing;
-schema tests and a one-question smoke test now come first); a failed live question saved as
-an empty recording; and, in the plant register, large power plants published without their
-municipality (now placed in their district) and late registrations that make the latest
-months look smaller than they are (stated in every answer).
+arithmetic in answers; a misrounded expected value in the eval set itself; a 4× undercount
+of negative-price hours in years with hourly prices; two daylight-saving bugs; data sources
+that would have returned German prices for a French request; a price-spread sign read the
+wrong way round; tool schemas the API rejects (an unsupported keyword, then the limits on
+nullable parameters and on the combined grammar of strict tools); a failed live question
+saved as an empty recording; large power plants published without their municipality;
+late registrations in the plant register; an API forecast type that returns no data; a
+generic turbine power curve that made a wind index *worse*; and a `.gitignore` rule that
+silently left a whole code package out of the repository (CI caught it).
 
 ## Data sources and licences
 
 | Source | Data | Licence |
 |---|---|---|
-| [Energy-Charts](https://energy-charts.info) (Fraunhofer ISE) | generation, load, flows, capacity | CC BY 4.0 |
+| [Energy-Charts](https://energy-charts.info) (Fraunhofer ISE) | generation, load, flows, capacity, grid operators' day-ahead forecasts | CC BY 4.0 |
 | [SMARD](https://www.smard.de) (Bundesnetzagentur) | day-ahead prices (DE-LU and 11 neighbouring zones), control areas | CC BY 4.0 |
 | [DWD open data](https://opendata.dwd.de) | 10-minute wind and solar radiation, 65 stations | CC BY 4.0 |
-| [netztransparenz.de](https://www.netztransparenz.de) (the four TSOs) | redispatch and countertrading measures | © TSOs: not openly licensed (see below) |
+| [Open-Meteo](https://open-meteo.com) | weather forecasts up to 7 days, and as issued 1–7 days earlier | CC BY 4.0 (free tier, non-commercial) |
 | [Marktstammdatenregister](https://www.marktstammdatenregister.de) (Bundesnetzagentur) | every power plant and storage unit, aggregated by municipality and year | dl-de/by-2-0 |
+| [netztransparenz.de](https://www.netztransparenz.de) (the four TSOs) | redispatch and countertrading measures | © TSOs: not openly licensed (see below) |
 | UBA, BDEW / AGEB, netztransparenz | official statistics (curated file with source, date and status) | cited |
 
-Only openly licensed price zones are offered; Energy-Charts marks other zones as
-internal-use only.
+**Redispatch data.** netztransparenz.de content is copyright-protected; reproducing it needs
+the TSOs' written consent. GridAgent fetches it with the user's own free API account, uses
+it for the account holder's own analysis, never shows it on the dashboard, and never commits
+real measures: tests use a clearly labelled **synthetic** file, and a test fails otherwise.
 
-**Redispatch data and its licence.** netztransparenz.de content is copyright-protected;
-reproducing it needs the TSOs' prior written consent. So GridAgent fetches it with the
-user's own free API account (OAuth 2.0 client credentials, `NTP_CLIENT_ID` /
-`NTP_CLIENT_SECRET`), uses it for the account holder's own analysis, returns only
-aggregates, and never commits real measures: tests and evals use a clearly labelled
-**synthetic** file in the documented format, and a test fails if anything else appears
-there. Publishing real measures would need the TSOs' permission.
+**Why it is not a public website.** Everything is built for publishing (a static site and a
+GitHub Pages workflow, AI text labelled, no cookies or external requests), but a regularly
+updated, news-like page in Germany needs a legal notice (Impressum). GridAgent therefore runs
+locally; the workflow can only be started by hand and refuses to publish without one.
 
 ## Quick start
 
 ```bash
-uv sync                                   # Python 3.12, pinned dependencies (uv.lock)
-uv run pytest                             # tests, offline
-uv run garden eval energy_qa --oracle     # evaluation, free and offline
-
-cp .env.example .env                      # add ANTHROPIC_API_KEY
-set -a && source .env && set +a
-uv run garden run energy_qa "What was the average day-ahead price yesterday?"
-uv run garden chat energy_qa              # conversation with follow-up questions
+cp .env.example .env              # ANTHROPIC_API_KEY; optional DATABASE_URL_READER
+docker compose up -d --build      # the app at http://localhost:8000, restarts by itself
 ```
 
-**Website** for researchers and analysts (chat, charts with CSV download, plain-language
-"How this was calculated", sources; no model or agent jargon):
+The app builds yesterday's briefing on its own (checking every 30 minutes) and has a
+Refresh button. Without an API key the dashboard still works (its story is then the
+template version written by code), but the chat is unavailable. Spending is capped
+(`GARDEN_UI_BUDGET_USD`, default $1.00).
+
+Without Docker:
 
 ```bash
-uv sync --extra web --extra db
-uv run --extra web garden ui              # http://localhost:8000 (listens on 127.0.0.1 only)
-docker compose up --build                 # the same in Docker
+uv sync --extra web --extra db                     # Python 3.12, pinned (uv.lock)
+set -a && source .env && set +a
+uv run --extra web garden ui                       # the same app at http://localhost:8000
+uv run --extra db garden today                     # or: build the briefing and open the page
+uv run pytest                                      # tests, offline
 ```
-
-The website has a spending limit (`GARDEN_UI_BUDGET_USD`, default $1.00) and runs on live
-data, or on recorded data with `GARDEN_WEB_FIXTURES=1`.
 
 ## Command line
 
 ```bash
-# Agent Garden
-uv run garden list | validate | tools     # registry, config checks, available tools
-uv run garden new my_agent                # scaffold a new agent from the template
-uv run garden runs                        # monitoring: ok/error rate, latency, cost, unbacked numbers
+# Daily monitor
+uv run garden brief [--day 2026-11-15] [--no-explain]       # briefing (story by the model unless --no-explain)
+uv run garden today                                          # briefing + local page, opened in the browser
+uv run garden anomalies --start 2026-10-18 --end 2026-11-15  # backtest the anomaly engine (free)
+uv run garden forecast-skill --start 2026-09-01 --end 2026-11-14
 
-# Evaluations
-uv run garden eval energy_qa@0.7.0                                # replay if recorded, else oracle
-uv run garden eval energy_qa --live --record --max-cost 0.10      # real model, hard limit
-uv run garden eval energy_qa --live --case price_week_vs_october  # selected questions only
-uv run garden compare energy_qa@0.6.0 energy_qa@0.7.0             # version vs version
+# Agents and evaluations
+uv run garden list | validate | tools
+uv run garden run energy_qa "What was the average day-ahead price yesterday?"
+uv run garden chat energy_qa
+uv run garden eval energy_qa                                      # replay if recorded, else oracle
+uv run garden eval energy_qa --live --record --max-cost 0.15      # real model, hard limit
+uv run garden compare energy_qa@0.10.0 energy_qa@0.12.0
+uv run garden runs                                                # monitoring of logged runs
 
 # Plant register (Marktstammdatenregister)
-uv run garden mastr sync                  # ~1.7 GB of the 3.3 GB export, read by HTTP range requests
-uv run garden mastr sync --light          # without solar and storage: 30 MB, under a minute
-uv run garden mastr upload                # store it in the database for the website (Docker)
+uv run garden mastr sync --upload       # ~1.7 GB of the 3.3 GB export via HTTP range requests, stored in the database
 uv run garden mastr export nrw_wind.csv --state Nordrhein-Westfalen --technology wind
 
 # Database (optional; Supabase or any PostgreSQL)
@@ -220,75 +230,63 @@ uv run garden db sync --since 2018-01-01 --regional-since 2026-01-01
 
 ## Database
 
-History is served from PostgreSQL (Supabase, Frankfurt) when synced: faster, no rate
-limits, any period length. Anything not synced yet, such as today, falls back to the live
-APIs, and so does every request if the database is unreachable.
+History is served from PostgreSQL (Supabase, Frankfurt) when synced; anything not synced
+yet, such as today, falls back to the live APIs, and so does every request if the database
+is unreachable. One table per data type, 15-minute rows as fixed-point integers (exact for
+the 3 decimals the APIs deliver); `energy.sync_log` records which days were loaded; the app
+reads with a read-only role. The plant register is stored as one compressed aggregate per
+export (3.7 MB, the newest four kept, which shows how late registrations revise figures).
 
-- One table per data type, 15-minute rows, values stored as fixed-point integers
-  (value × 1000): exact for the 3 decimals the APIs deliver, as small as a 4-byte float.
-- `energy.sync_log` records which days were loaded; a period is served from the database
-  only if fully covered. Reads are packed per day (half the download) and cached on disk.
-- The app reads with a read-only role; the owner credentials are used only for syncing.
-- 2018 to today for power and prices, 2020 to today for weather: about 200 MB.
-- The plant register is stored as one compressed aggregate per export (`energy.plant_register`,
-  3.7 MB; the newest four exports are kept, which shows how late registrations revise the
-  figures). The tool always needs the whole aggregate, so one read beats ~600,000 rows: the
-  website downloads it once per export (5 s), then checks for a newer one in 0.4 s.
+## Plant register
+
+The Marktstammdatenregister lists about 7 million generating and storage units. `garden
+mastr sync` never downloads the whole 3.3 GB export: it reads the ZIP's table of contents
+over HTTP range requests and streams only the unit files, keeping an aggregate (municipality
+× technology × year: added, decommissioned, planned, community-owned wind). National totals
+agree with Energy-Charts within 0.1–0.7% for wind, coal and biomass. Large plants are
+published with their district but not their municipality, and late registrations make the
+latest months grow afterwards: both are stated in every answer. `garden mastr export`
+writes a balanced municipality × year panel for research.
 
 ## Project layout
 
 ```
-agents/energy_qa/        agent versions (agent.yaml + system_prompt.md), evals.yaml, recordings
+agents/energy_qa/        analyst agent: versions (agent.yaml + system prompt), evals.yaml, recordings
+agents/news_writer/      news-writer agent: versions and the newsroom style guide
 src/gridagent/agent/     tool-use loop, conversations, run logs
-src/gridagent/tools/     tool definitions, ToolBox, statistics, conditional stats, grounding check
-src/gridagent/data/      API clients (Energy-Charts, SMARD, DWD, netztransparenz, MaStR), caching
+src/gridagent/tools/     tool definitions, ToolBox, statistics, investigator, battery, register, grounding
+src/gridagent/monitor/   daily briefing: figures, anomaly engine, forecasts, outlook, explanations, writer, captions
+src/gridagent/data/      API clients (Energy-Charts, SMARD, DWD, Open-Meteo, netztransparenz, MaStR), caching
 src/gridagent/db/        PostgreSQL schema, sync, database and hybrid data sources
 src/gridagent/evals/     eval set, oracle/replay/live runner, scoring, reports
-src/gridagent/web/       FastAPI backend and the static website
-tests/                   439 tests; independent reference calculations; recorded API data
+src/gridagent/site/      static dashboard pages (inline SVG charts, no scripts)
+src/gridagent/web/       FastAPI app: dashboard, chat, refresh, daily background briefing
+tests/                   538 tests; independent reference calculations; recorded API data
 ```
-
-## Plant register
-
-The Marktstammdatenregister lists every generating and storage unit in Germany, about 7
-million, most of them rooftop solar. The Bundesnetzagentur publishes it daily as one
-3.3 GB ZIP of XML files. `garden mastr sync` never downloads the whole file: the server
-accepts HTTP range requests, so it reads the ZIP's table of contents and then only the
-unit files, parsing each as a stream. It keeps an aggregate (municipality × technology ×
-year: capacity added, permanently decommissioned, planned, community-owned wind), about
-1/100 of the size, with codes translated through the register's own catalogue.
-
-National totals agree with Energy-Charts within 0.1–0.7 % for wind, coal and biomass.
-Solar is 2.7 % below Energy-Charts' AC figure (117.7 vs 121.0 GW: the register's net rated
-power is a different definition), batteries 5 % below, and pumped storage much lower (6.2
-vs 9.9 GW), probably because Energy-Charts also counts plants abroad that feed the German
-grid; the register lists units in Germany only. Two
-things to know when using it: large plants on the high-voltage grid are published with
-their district but not their municipality, and units are often registered months late,
-so the latest months are revised upward. `garden mastr export` writes a balanced
-municipality × year panel as CSV for research, with the citation the licence asks for.
 
 ## Limits and responsible use
 
-- **Germany only**, past data only (and tomorrow's prices once published). No forecasts,
-  no investment or trading advice.
+- **Germany and its neighbours.** Past data, plus published day-ahead prices and published
+  forecasts with their reliability; no predictions of its own, no investment or trading advice.
 - **Preliminary data:** recent values are revised by the publishers; official figures are
   labelled final, preliminary, estimated or reported.
-- **Weather is an indicator:** a plain mean over 65 stations (16 in Bavaria) at ~10 m
-  height. Weather-related results are associations, with thresholds the agent states.
-- **The grounding check is a heuristic:** it catches numbers no tool produced, but not
-  arithmetic in words ("about a third"). Live results above are for one model on one
-  question set; a new model or prompt needs a new live run.
-- **Cost control:** hard limits on live evaluations and on the website; the API key is
-  never stored in the image or the repository.
+- **Associations, not causes.** Weather, residual load and anomaly results describe what
+  coincided; the dashboard and the agents say so.
+- **The checks are heuristics:** they catch numbers no tool produced, causal wording and
+  hype, but not every weak argument. Live results are for one model on one question set; a
+  new model or prompt needs a new live run.
+- **Cost control:** hard limits on live evaluations, on the app and on the daily briefing;
+  the API key is never stored in the image or the repository.
 
 ## Next steps
 
+- A price forecast for tomorrow from the published forecasts, backtested against the
+  auction results and simple baselines.
+- Phone alerts (negative prices tomorrow, cheapest hours, spikes).
 - Battery value on intraday prices (the day-ahead result is an upper bound only).
-- Weather per control area, and climate context against the 1991–2020 normal.
-- A nightly sync job (GitHub Actions) to keep the database current.
 
 ---
 
-Data: Energy-Charts.info (Fraunhofer ISE), Bundesnetzagentur | SMARD.de and Deutscher
-Wetterdienst, all CC BY 4.0. Built with the Claude API (Anthropic).
+Data: Energy-Charts.info (Fraunhofer ISE), Bundesnetzagentur | SMARD.de, Deutscher
+Wetterdienst and Open-Meteo, all CC BY 4.0; Marktstammdatenregister, © Bundesnetzagentur,
+dl-de/by-2-0. Built with the Claude API (Anthropic).
