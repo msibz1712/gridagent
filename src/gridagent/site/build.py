@@ -362,8 +362,9 @@ def archive(days: list[str]) -> str:
 """  # noqa: E501
 
 
-def build_site(briefings_dir: Path, out_dir: Path, ai_story: bool = False,
-               legal_notice: str | None = None) -> list[str]:
+def build_site(
+    briefings_dir: Path, out_dir: Path, ai_story: bool = False, legal_notice: str | None = None
+) -> list[str]:
     """Write the whole site; returns the days built, newest first."""
     files = sorted(briefings_dir.glob("????-??-??.json"), reverse=True)
     if not files:
