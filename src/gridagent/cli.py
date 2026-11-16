@@ -791,6 +791,9 @@ def brief(
         console.print(f"[bold]• {event.title}[/]")
         if event.explanation:
             console.print(Panel(event.explanation, border_style="dim"))
+    for expected in briefing.outlooks:
+        console.print(f"[cyan]{expected.day} forecast:[/] {expected.headline}; peak residual "
+                      f"load {expected.peak_residual_load_gw} GW")  # fmt: skip
     for plan in briefing.plans:
         console.print(f"[cyan]{plan.day}:[/] cheapest {plan.cheapest_hours} "
                       f"({plan.cheapest_price} EUR/MWh), dearest {plan.dearest_hours} "

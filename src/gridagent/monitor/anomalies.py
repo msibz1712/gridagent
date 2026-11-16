@@ -481,6 +481,12 @@ def day_stories(data: DataProvider, day: date, history: dict[date, dict] | None 
         stories.append(negative)
     if generation is not None:
         stories += lull_stories(day, generation)
+        try:
+            from gridagent.monitor.forecasts import miss_stories  # forecasts builds on this module
+
+            stories += miss_stories(day, generation, data.forecast(start, day))
+        except (NoDataError, EnergyChartsError):
+            pass  # no forecasts for this period: no forecast-miss stories
     if history:
         stories += record_stories(day, history) + streak_stories(day, history)
         stories += shift_stories(day, history)

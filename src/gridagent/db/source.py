@@ -174,6 +174,9 @@ class HybridDataSource:
     def redispatch(self, start: date, end: date):
         return self.live.redispatch(start, end)
 
+    def forecast(self, start: date, end: date) -> TimeSeriesResponse:
+        return self.live.forecast(start, end)  # forecasts are not stored
+
     def plant_register(self):
         try:
             data = self.database.plant_register()

@@ -74,6 +74,15 @@ class EnergyChartsClient:
         params = {"country": country, "start": start.isoformat(), "end": end.isoformat()}
         return self._fetch("/v2/public_power", params, start, end)
 
+    def power_forecast(
+        self, kind: str, start: date, end: date, horizon: str = "day-ahead", country: str = "de"
+    ) -> TimeSeriesResponse:
+        """Forecast of wind, solar or load in MW (15-minute values). `horizon` day-ahead is the
+        forecast made the day before; past days stay available, so misses can be measured."""
+        params = {"country": country, "production_type": kind, "forecast_type": horizon,
+                  "start": start.isoformat(), "end": end.isoformat()}  # fmt: skip
+        return self._fetch("/v2/public_power_forecast", params, start, end)
+
     def day_ahead_price(self, start: date, end: date, bzn: str = "DE-LU") -> TimeSeriesResponse:
         """Day-ahead spot price in EUR/MWh for a bidding zone (default Germany-Luxembourg)."""
         params = {"bzn": bzn, "start": start.isoformat(), "end": end.isoformat()}

@@ -6,7 +6,7 @@ Two implementations share this interface:
 """
 
 import os
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -14,7 +14,7 @@ from gridagent.data.cache import ResponseCache
 from gridagent.data.client import EnergyChartsClient, NoDataError, berlin_today
 from gridagent.data.dwd import DwdClient, fetch_weather
 from gridagent.data.mastr import load_register
-from gridagent.data.models import TimeSeriesResponse
+from gridagent.data.models import DataRow, SeriesInfo, TimeSeriesResponse
 from gridagent.data.netztransparenz import Measure, NetztransparenzClient
 from gridagent.data.smard import SMARD_BASE_URL, SmardClient
 
@@ -43,6 +43,54 @@ class DataProvider(Protocol):
     def redispatch(self, start: date, end: date) -> list[Measure]: ...
 
     def plant_register(self) -> dict[str, Any]: ...
+
+    def forecast(self, start: date, end: date) -> TimeSeriesResponse: ...
+
+
+def month_chunks(start: date, end: date, today: date) -> list[tuple[date, date]]:
+    """Calendar months covering start..end. The current month always runs to tomorrow (the
+    API returns what is published), so one request per day serves every window in it."""
+    chunks, first = [], start.replace(day=1)
+    while first <= end:
+        following = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
+        last = following - timedelta(days=1)
+        if last >= today:
+            last = max(end, today + timedelta(days=1))
+        chunks.append((first, last))
+        first = following
+    return chunks
+
+
+# The API also lists a combined "wind" type, but returns no data for it (checked Nov 2026):
+# onshore and offshore are fetched and added up instead.
+FORECAST_KINDS = ("wind_onshore", "wind_offshore", "solar", "load")
+FORECAST_SERIES = ("wind", "solar", "load")
+
+
+def merge_forecasts(parts: dict[str, TimeSeriesResponse]) -> TimeSeriesResponse:
+    """One response with series wind (onshore + offshore), solar, load and residual_load (MW)."""
+    values: dict = {}
+    for kind, response in parts.items():
+        for row in response.data:
+            values.setdefault(row.timestamp, {})[kind] = row.values.get(kind)
+    rows = []
+    for timestamp in sorted(values):
+        raw = values[timestamp]
+        if any(raw.get(k) is None for k in FORECAST_KINDS):
+            v = {k: None for k in (*FORECAST_SERIES, "residual_load")}
+        else:
+            wind = raw["wind_onshore"] + raw["wind_offshore"]
+            v = {"wind": round(wind, 1), "solar": raw["solar"], "load": raw["load"],
+                 "residual_load": round(raw["load"] - wind - raw["solar"], 1)}  # fmt: skip
+        rows.append(DataRow(timestamp=timestamp, values=v))
+    first = next(iter(parts.values()))
+    return first.model_copy(update={
+        "endpoint": "forecast",
+        "attributes": {"horizon": "day-ahead"},
+        "series": [SeriesInfo(id=k, name=f"{k.replace('_', ' ')} forecast (day-ahead)")
+                   for k in (*FORECAST_SERIES, "residual_load")],
+        "data": rows,
+    })  # fmt: skip
 
 
 class LiveDataSource:
@@ -91,6 +139,26 @@ class LiveDataSource:
                 cache=self._ntp_cache,
             )
         return self._ntp.measures(start, end)
+
+    def forecast(self, start: date, end: date) -> TimeSeriesResponse:
+        """Day-ahead forecasts of wind, solar and load (Energy-Charts), merged into one
+        response with a forecast residual load (load minus wind and solar)."""
+        # Fetched by calendar month: a past month is one cached request per series, however
+        # many different windows (backtests, briefings) ask for parts of it.
+        merged: list[TimeSeriesResponse] = []
+        for first, last in month_chunks(start, end, berlin_today()):
+            try:
+                parts = {kind: self.energy_charts.power_forecast(kind, first, last)
+                         for kind in FORECAST_KINDS}  # fmt: skip
+            except NoDataError:
+                if first > berlin_today():
+                    continue  # tomorrow's forecast may not be published yet
+                raise
+            merged.append(merge_forecasts(parts))
+        if not merged:
+            raise NoDataError(f"No forecast published for {start} to {end}.")
+        rows = [r for m in merged for r in m.data if start <= r.timestamp.date() <= end]
+        return merged[0].model_copy(update={"data": rows})
 
     def plant_register(self) -> dict[str, Any]:
         """The MaStR aggregate built by `garden mastr sync` (read once, then kept in memory)."""

@@ -20,6 +20,7 @@ from gridagent.data.models import Series, TimeSeriesResponse
 from gridagent.data.provider import DataProvider
 from gridagent.data.sources import source_series
 from gridagent.monitor.anomalies import Story, day_stories, load_history
+from gridagent.monitor.forecasts import Outlook, outlook
 from gridagent.tools.flexibility import Battery, simulate_battery
 from gridagent.tools.investigate import BERLIN, hourly
 
@@ -73,6 +74,7 @@ class Briefing(BaseModel):
     figures: list[Figure]
     events: list[Story]  # best first
     plans: list[DayPlan]
+    outlooks: list[Outlook] = []  # day-ahead forecasts for today and tomorrow, when published
     not_available: list[str] = []
     sources: list[str]
     cost_usd: float = 0.0
@@ -247,14 +249,24 @@ def build_briefing(data: DataProvider, day: date, today: date,
     prices = data.day_ahead_price(start, day).get_series("day_ahead_price")
     not_available: list[str] = []
     figures: list[Figure] = []
+    generation_or_none = None
     try:
-        generation = data.public_power(start, day)
-        figures = day_figures(day, prices, generation)
+        generation_or_none = data.public_power(start, day)
+        figures = day_figures(day, prices, generation_or_none)
     except (NoDataError, EnergyChartsError, KeyError) as exc:
         not_available.append(f"generation data ({exc})")
     if history is None:
         history = load_history(data, day)
     events = day_stories(data, day, history)[:MAX_STORIES]
+
+    outlooks = []
+    for plan_day in (today, today + timedelta(days=1)):
+        try:
+            expected = outlook(plan_day, data.forecast(plan_day, plan_day), generation_or_none)
+        except (NoDataError, EnergyChartsError):
+            expected = None
+        if expected is not None:
+            outlooks.append(expected)
 
     plans = []
     for plan_day in (today, today + timedelta(days=1)):
@@ -271,6 +283,7 @@ def build_briefing(data: DataProvider, day: date, today: date,
         figures=figures,
         events=events,
         plans=plans,
+        outlooks=outlooks,
         not_available=not_available,
         sources=["Energy-Charts.info (Fraunhofer ISE)",
                  "Bundesnetzagentur | SMARD.de via Energy-Charts.info (prices)"],

@@ -61,6 +61,9 @@ class FixtureDataSource:
     def weather(self, start: date, end: date) -> TimeSeriesResponse:
         return self._find("weather", start, end)
 
+    def forecast(self, start: date, end: date) -> TimeSeriesResponse:
+        return self._find("forecast", start, end)
+
     def plant_register(self) -> dict[str, Any]:
         """A real excerpt of the register (see fixtures/mastr/README.md)."""
         file = self.directory / "mastr" / "register_excerpt.json.gz"
