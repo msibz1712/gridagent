@@ -4,6 +4,8 @@ from datetime import date, timedelta
 
 import pytest
 
+import gridagent.monitor.price_forecast as pf
+from gridagent.data.client import NoDataError
 from gridagent.monitor.hours import best_blocks
 from gridagent.monitor.price_forecast import History, backtest, forecast_day
 
@@ -66,3 +68,44 @@ def test_cheapest_and_dearest_blocks() -> None:
         20: 305.0,
     }
     assert best_blocks(hours) == (3, 11.0, 18, 305.0)
+
+
+# ---------- the outlook on the dashboard ----------
+
+TODAY = date(2026, 11, 10)
+
+
+def outlook_with(monkeypatch, h: History) -> dict | None:
+    monkeypatch.setattr(pf, "load_history", lambda data, start, end: h)
+    return pf.outlook(data=None, today=TODAY)  # type: ignore[arg-type]
+
+
+def test_outlook_after_the_auction_shows_forecast_next_to_the_result(monkeypatch) -> None:
+    result = outlook_with(monkeypatch, world())
+    assert result is not None and result["date"] == "2026-11-11"
+    assert len(result["hourly_eur_mwh"]) == 24 and None not in result["hourly_eur_mwh"]
+    assert result["cheapest_hours"].endswith(":00") and "–" in result["dearest_hours"]
+    assert result["published_mean_eur_mwh"] == pytest.approx(result["mean_eur_mwh"], abs=1.0)
+    assert result["check_today"]["mae_eur_mwh"] < 1.0  # a perfect world: tiny errors
+    assert "days" not in result["recent_error"]  # the summary only, not every day
+
+
+def test_outlook_before_the_auction_has_no_published_prices(monkeypatch) -> None:
+    h = world()
+    for hour in range(24):
+        del h.price[(TODAY + DAY, hour)]  # tomorrow's auction has not run yet
+    result = outlook_with(monkeypatch, h)
+    assert result is not None and "published_mean_eur_mwh" not in result
+
+
+def test_no_outlook_without_data_or_with_too_few_hours(monkeypatch) -> None:
+    def missing(data, start, end):
+        raise NoDataError("no prices")
+
+    monkeypatch.setattr(pf, "load_history", missing)
+    assert pf.outlook(data=None, today=TODAY) is None  # type: ignore[arg-type]
+
+    h = world()
+    for hour in range(6):  # a weather forecast with a gap: not a day's forecast
+        del h.wind_fc[(TODAY + DAY, hour)]
+    assert outlook_with(monkeypatch, h) is None

@@ -11,7 +11,7 @@ is checked automatically on every answer and every story.
 **At a glance:** 2 agents (analyst and news writer) · 20 tools · 73-question eval set ·
 **97.3%** live pass rate on the latest version (93.6–98.3% on every version since 0.4.0) ·
 **100%** of out-of-scope questions declined · about **$0.001 and 9 s per question**, about
-**$0.005 per daily briefing** · news writer: **94.1%** on 17 graded stories · 560 tests · CI that replays real model answers for free ·
+**$0.005 per daily briefing** · news writer: **94.1%** on 17 graded stories · 574 tests, 86% coverage, type-checked · CI that replays real model answers for free ·
 Docker · PostgreSQL (Supabase) with history since 2018 · runs on your own machine.
 
 ---
@@ -223,7 +223,7 @@ uv sync --extra web --extra db                     # Python 3.12, pinned (uv.loc
 set -a && source .env && set +a
 uv run --extra web garden ui                       # the same app at http://localhost:8000
 uv run --extra db garden today                     # or: build the briefing and open the page
-uv run pytest                                      # tests, offline
+uv run pytest --cov                                # tests, offline, with coverage (CI: at least 85%)
 uv run ruff check . && uv run mypy                 # lint and type check (both run in CI)
 ```
 

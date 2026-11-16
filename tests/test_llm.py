@@ -1,9 +1,13 @@
 """Pricing and the conversion of real SDK responses into ModelResponse."""
 
+import json
+
+import anthropic
+import httpx2 as httpx  # the HTTP client the anthropic SDK is built on
 import pytest
 from anthropic.types import Message
 
-from gridagent.llm.base import TokenUsage
+from gridagent.llm.base import LLMError, TokenUsage
 from gridagent.llm.claude import ClaudeLLM, to_model_response
 from gridagent.llm.pricing import estimate_cost_usd
 
@@ -71,3 +75,73 @@ def test_fallback_only_enabled_for_supported_models() -> None:
         ClaudeLLM("claude-sonnet-5-5", refusal_fallback=False, client=object()).use_fallback
         is False
     )
+
+
+# ---------- create(): the real SDK over a fake HTTP transport (no network, no cost) ----------
+
+
+REPLY = {
+    "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-haiku-5-5",
+    "content": [{"type": "text", "text": "Hello."},
+                {"type": "tool_use", "id": "tu_1", "name": "get_price", "input": {"day": "x"}}],
+    "stop_reason": "tool_use", "stop_sequence": None,
+    "usage": {"input_tokens": 12, "output_tokens": 5, "cache_read_input_tokens": 100,
+              "cache_creation_input_tokens": 0},
+}  # fmt: skip
+
+
+def llm_with(handler, model: str = "claude-haiku-5-5", **kwargs) -> tuple[ClaudeLLM, list]:
+    seen: list[httpx.Request] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return handler(request)
+
+    transport = httpx.MockTransport(record)
+    client = anthropic.Anthropic(
+        api_key="test-key", max_retries=0, http_client=httpx.Client(transport=transport)
+    )
+    return ClaudeLLM(model, client=client, **kwargs), seen
+
+
+def test_create_sends_caching_and_effort_and_parses_the_reply() -> None:
+    llm, seen = llm_with(lambda r: httpx.Response(200, json=REPLY), effort="low")
+    tools = [{"name": "get_price", "description": "d", "input_schema": {"type": "object"}}]
+    response = llm.create("You are terse.", tools, [{"role": "user", "content": "Hi"}])
+
+    body = json.loads(seen[0].content)
+    assert body["system"][0]["cache_control"] == {"type": "ephemeral"}  # tools + system cached
+    assert body["cache_control"] == {"type": "ephemeral"}  # and the growing conversation
+    assert body["output_config"] == {"effort": "low"} and "thinking" not in body
+    assert response.stop_reason == "tool_use" and response.text() == "Hello."
+    assert response.tool_uses()[0]["input"] == {"day": "x"}
+    assert response.usage.cache_read_input_tokens == 100
+
+
+def test_refusal_fallback_uses_the_beta_endpoint_on_supported_models() -> None:
+    llm, seen = llm_with(lambda r: httpx.Response(200, json=REPLY), model="claude-sonnet-5-5")
+    llm.create("s", [], [{"role": "user", "content": "Hi"}])
+    assert "server-side-fallback" in seen[0].headers.get("anthropic-beta", "")
+    assert json.loads(seen[0].content)["fallbacks"] == "default"
+
+
+@pytest.mark.parametrize(("status", "message"), [
+    (401, "Authentication failed"),
+    (400, "Bad request"),
+    (429, "Rate limited"),
+    (529, "HTTP 529"),
+])  # fmt: skip
+def test_api_errors_become_one_clear_llm_error(status: int, message: str) -> None:
+    error = {"type": "error", "error": {"type": "x", "message": "nope"}}
+    llm, _ = llm_with(lambda r: httpx.Response(status, json=error))
+    with pytest.raises(LLMError, match=message):
+        llm.create("s", [], [{"role": "user", "content": "Hi"}])
+
+
+def test_an_unreachable_api_is_an_llm_error() -> None:
+    def down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route", request=request)
+
+    llm, _ = llm_with(down)
+    with pytest.raises(LLMError, match="Could not reach"):
+        llm.create("s", [], [{"role": "user", "content": "Hi"}])
