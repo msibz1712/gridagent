@@ -122,6 +122,14 @@ def covered_ranges(conn: psycopg.Connection, table: TableSpec, region: str = "")
     return [tuple(r) for r in merged]
 
 
+def _one(cursor: psycopg.Cursor) -> tuple[Any, ...]:
+    """The single row of an aggregate query (count, max, size: always exactly one row)."""
+    row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError("An aggregate query returned no row.")
+    return row
+
+
 def last_sync_id(
     conn: psycopg.Connection, table: TableSpec, start: date, end: date, region: str = ""
 ) -> int | None:
@@ -130,11 +138,13 @@ def last_sync_id(
     Used as part of the disk-cache key, so re-syncing a period refreshes cached reads of
     it, while the nightly sync of the last days leaves older cached periods valid.
     """
-    return conn.execute(
-        f"select max(id) from {SCHEMA}.sync_log where table_name = %s and region = %s "
-        "and date_from <= %s and date_until >= %s",
-        (table.name, region, end, start),
-    ).fetchone()[0]
+    return _one(
+        conn.execute(
+            f"select max(id) from {SCHEMA}.sync_log where table_name = %s and region = %s "
+            "and date_from <= %s and date_until >= %s",
+            (table.name, region, end, start),
+        )
+    )[0]
 
 
 def is_covered(
@@ -308,10 +318,12 @@ def status(conn: psycopg.Connection) -> list[dict[str, Any]]:
     """Per table: rows, size on disk and covered date ranges (for `garden db status`)."""
     result = []
     for table in TABLES.values():
-        rows, size = conn.execute(
-            f"select count(*), pg_total_relation_size('{SCHEMA}.{table.name}') "
-            f"from {SCHEMA}.{table.name}"
-        ).fetchone()
+        rows, size = _one(
+            conn.execute(
+                f"select count(*), pg_total_relation_size('{SCHEMA}.{table.name}') "
+                f"from {SCHEMA}.{table.name}"
+            )
+        )
         regions = [""]
         if table.regional:
             regions = [r[0] for r in conn.execute(
@@ -323,7 +335,7 @@ def status(conn: psycopg.Connection) -> list[dict[str, Any]]:
 
 
 def database_bytes(conn: psycopg.Connection) -> int:
-    return conn.execute("select pg_database_size(current_database())").fetchone()[0]
+    return _one(conn.execute("select pg_database_size(current_database())"))[0]
 
 
 # ---------- read-only role ----------

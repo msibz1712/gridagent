@@ -104,6 +104,7 @@ def stats_when(operation: str, conditions: list[Condition], target: Series | Non
         result.update(value=len(selected), unit="h")
         return result
 
+    assert target is not None and target_hours is not None  # checked at the top
     result["series"] = target.id
     values = [target_hours[hour] for hour in selected]
     if not values:

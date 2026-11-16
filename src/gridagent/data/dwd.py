@@ -145,7 +145,7 @@ def build_response(
         DataRow(
             timestamp=hour.astimezone(BERLIN),
             values={
-                sid: None if values[hour][0] is None else round(values[hour][0], 2)
+                sid: None if (value := values[hour][0]) is None else round(value, 2)
                 for sid, values in series.items()
             },
         )  # fmt: skip

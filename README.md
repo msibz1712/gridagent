@@ -199,6 +199,7 @@ set -a && source .env && set +a
 uv run --extra web garden ui                       # the same app at http://localhost:8000
 uv run --extra db garden today                     # or: build the briefing and open the page
 uv run pytest                                      # tests, offline
+uv run ruff check . && uv run mypy                 # lint and type check (both run in CI)
 ```
 
 ## Command line

@@ -49,6 +49,9 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
 
+      - name: Type check
+        run: uv run mypy
+
       - name: Tests (offline; live tests are skipped by default; db tests use the service)
         env:
           TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/gridagent_test

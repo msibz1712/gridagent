@@ -116,8 +116,9 @@ class Outlook(BaseModel):
 def outlook(day: date, forecast: TimeSeriesResponse, generation: TimeSeriesResponse | None,
             ) -> Outlook | None:  # fmt: skip
     """None when the day's forecast is not (completely) published yet."""
-    expected = {k: daily_gwh(forecast.get_series(k)).get(day) for k in ("wind", "solar", "load")}
-    if any(v is None for v in expected.values()):
+    found = {k: daily_gwh(forecast.get_series(k)).get(day) for k in ("wind", "solar", "load")}
+    expected = {k: v for k, v in found.items() if v is not None}
+    if len(expected) < len(found):
         return None
     residual = [
         p.value

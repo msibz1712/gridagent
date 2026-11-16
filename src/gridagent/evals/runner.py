@@ -225,7 +225,8 @@ def compute_metrics(results: list[CaseResult]) -> Metrics:
         for r in results
     ]
     costs = [r.cost_usd for r in results]
-    known_costs = None if any(c is None for c in costs) else costs
+    present = [c for c in costs if c is not None]
+    known_costs = present if len(present) == len(costs) else None  # all or nothing
     latencies = sorted(r.latency_s for r in results)
     n = len(results)
     return Metrics(

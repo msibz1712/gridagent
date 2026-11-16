@@ -38,7 +38,13 @@ from gridagent.evals.report import (
     load_report,
     write_report,
 )
-from gridagent.evals.runner import CaseResult, EvalReport, estimate_live_cost, supported_cases
+from gridagent.evals.runner import (
+    CaseResult,
+    EvalReport,
+    Mode,
+    estimate_live_cost,
+    supported_cases,
+)
 from gridagent.evals.session import choose_offline_mode, evaluate, load_agent_eval_set
 from gridagent.garden.registry import discover, resolve
 from gridagent.garden.scaffold import create_agent
@@ -319,6 +325,7 @@ def eval_command(
         raise typer.Exit(code=1)
 
     model_name = model or loaded.config.model.name
+    mode: Mode
     if live:
         _require_api_key()
         mode = "live"
@@ -779,6 +786,8 @@ def brief(
     except (NoDataError, EnergyChartsError) as exc:
         console.print(f"[red]No briefing for {reviewed}:[/] {exc}")
         raise typer.Exit(code=1) from exc
+    if briefing.story is None:  # run_briefing always writes one (model or template)
+        raise RuntimeError(f"The briefing for {reviewed} has no story.")
     story = NewsStory(**briefing.story)
     by = "the model" if story.written_by == "model" else "the template"
     console.print(Panel("\n\n".join([story.standfirst, *story.paragraphs]),
@@ -836,9 +845,10 @@ def anomalies(
         best = stories[0].score if stories else 0
         console.print(f"[bold]{day:%a %d %b %Y}[/]  top score {best:.2f}")
         for story in stories[:top]:
-            tag = {True: " [dim](explained)[/]", False: " [orange3](unexplained)[/]"}.get(
-                story.explained_by_fundamentals, ""
-            )
+            explained = story.explained_by_fundamentals
+            tag = ""
+            if explained is not None:
+                tag = " [dim](explained)[/]" if explained else " [orange3](unexplained)[/]"
             console.print(f"  {story.score:.2f}  {story.kind:<15} {story.title}{tag}")
         day += timedelta(days=1)
 

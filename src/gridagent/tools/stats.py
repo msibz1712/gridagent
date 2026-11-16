@@ -93,14 +93,14 @@ def compute_stats(
     if not valid:
         return result
 
-    values = [p.value for p in valid]
+    values = [p.value for p in valid if p.value is not None]  # typed: no None left
     if operation is Operation.SUM:
         result.value = sum(values)
     elif operation is Operation.MEAN:
         result.value = sum(values) / len(values)
     elif operation in (Operation.MIN, Operation.MAX):
         pick = min if operation is Operation.MIN else max
-        best: Point = pick(valid, key=lambda p: p.value)
+        best = valid[pick(range(len(values)), key=values.__getitem__)]
         result.value, result.timestamp = best.value, best.timestamp
     elif operation is Operation.ENERGY:
         if series.unit not in ENERGY_UNITS or not series.interval_minutes:
@@ -122,9 +122,9 @@ def _count_threshold(
     if not series.interval_minutes:
         raise ValueError(f"{operation.value} needs a series with a fixed interval")
     if operation is Operation.COUNT_BELOW:
-        hits = [p for p in valid if p.value < threshold]
+        hits = [p for p in valid if p.value is not None and p.value < threshold]
     else:
-        hits = [p for p in valid if p.value > threshold]
+        hits = [p for p in valid if p.value is not None and p.value > threshold]
     result.value = len(hits) * series.interval_minutes / 60
     result.unit = "h"
     result.detail = {"threshold": threshold, "threshold_unit": series.unit,
@@ -161,11 +161,11 @@ def _capture_price(price: Series, generation: Series | None) -> StatsResult:
     # Keyed by UTC: in German time the repeated hour when clocks go back (02:00-03:00
     # twice) would compare equal and the two hours would overwrite each other.
     weight_at = {p.timestamp.astimezone(UTC): p.value for p in generation.points}
-    pairs = [
-        (p.value, weight_at[p.timestamp.astimezone(UTC)])
-        for p in price.points
-        if p.value is not None and weight_at.get(p.timestamp.astimezone(UTC)) is not None
-    ]
+    pairs: list[tuple[float, float]] = []
+    for p in price.points:
+        weight = weight_at.get(p.timestamp.astimezone(UTC))
+        if p.value is not None and weight is not None:
+            pairs.append((p.value, weight))
     weight_sum = sum(w for _, w in pairs)
     value = sum(v * w for v, w in pairs) / weight_sum if weight_sum else None
     # Context analysts always ask for: the plain (time-weighted) average price and the
@@ -202,9 +202,9 @@ def capacity_factor(generation: Series, capacity_mw: float, capacity_note: str) 
         raise ValueError("capacity_factor needs a MW generation series with a fixed interval")
     if capacity_mw <= 0:
         raise ValueError("installed capacity must be positive")
-    valid = [p for p in generation.points if p.value is not None]
+    valid = [p.value for p in generation.points if p.value is not None]
     hours = len(valid) * generation.interval_minutes / 60
-    energy_mwh = sum(p.value for p in valid) * generation.interval_minutes / 60
+    energy_mwh = sum(valid) * generation.interval_minutes / 60
     return StatsResult(
         operation=Operation.CAPACITY_FACTOR,
         series_id=generation.id,

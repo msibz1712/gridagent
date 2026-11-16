@@ -132,15 +132,15 @@ def price_stories(day: date, price: Series, residual_load: Series | None) -> lis
     for hour in range(24):
         if (day, hour) not in prices:
             continue
-        normal = [prices[(d, hour)] for d in comparable if (d, hour) in prices]
-        if len(normal) < 5:
+        same_hour = [prices[(d, hour)] for d in comparable if (d, hour) in prices]
+        if len(same_hour) < 5:
             continue
         # Detect with median and MAD (robust); show the mean, the "usual" figure the
         # investigator reports too, so a page never shows two different normals.
-        center, scale = median(normal), robust_scale(normal)
+        center, scale = median(same_hour), robust_scale(same_hour)
         value = prices[(day, hour)]
         z = (value - center) / scale if scale else 0.0
-        info = {"price": value, "normal": sum(normal) / len(normal), "z": z}
+        info = {"price": value, "normal": sum(same_hour) / len(same_hour), "z": z}
         if curve is not None and (day, hour) in residual:
             x = residual[(day, hour)] / 1000
             info |= {"residual_gw": x, "expected": _curve(curve, x),

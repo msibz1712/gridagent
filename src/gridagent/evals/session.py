@@ -95,7 +95,8 @@ def evaluate(
         def llm_for_case(case: EvalCase) -> LLM:
             return oracle_llm(case)
 
-        after_case = None
+        def after_case(case: EvalCase, log: RunLog, llm: LLM) -> RunLog:
+            return log  # nothing recorded or replayed
 
     report = run_eval(
         agent,

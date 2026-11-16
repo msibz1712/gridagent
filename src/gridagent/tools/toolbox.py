@@ -686,8 +686,9 @@ class ToolBox:
         for candidate in monthly.data:
             if (candidate.timestamp.year, candidate.timestamp.month) == wanted_month:
                 row = candidate
-        values = [row.values.get(c) if row else None for c in CAPACITY_SERIES[source]]
-        if row is None or any(v is None for v in values):
+        raw = [row.values.get(c) if row else None for c in CAPACITY_SERIES[source]]
+        values = [v for v in raw if v is not None]
+        if row is None or len(values) < len(raw):
             raise NoDataError(
                 f"No installed capacity for {source} at end of {previous_month:%Y-%m}."
             )

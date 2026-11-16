@@ -116,10 +116,12 @@ def source_series(response: TimeSeriesResponse, source: str) -> Series:
     points: list[Point] = []
     for i, row in enumerate(response.data):
         values = [components[sid].points[i].value for sid in weights]
-        if any(v is None for v in values):
-            total = None
-        else:
-            total = sum(weights[sid] * v for sid, v in zip(weights, values, strict=True))
+        known = [v for v in values if v is not None]
+        total = (
+            sum(weights[sid] * v for sid, v in zip(weights, known, strict=True))
+            if len(known) == len(values)  # one missing component: the total is unknown
+            else None
+        )
         points.append(Point(timestamp=row.timestamp, value=total))
 
     return Series(

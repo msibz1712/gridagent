@@ -164,8 +164,8 @@ def latest_export_url(http: httpx.Client | None = None) -> str:
     page = (http or httpx.Client(timeout=60)).get(DOWNLOAD_PAGE).text
     urls = sorted(
         set(m.group(0) for m in EXPORT_PATTERN.finditer(page)),
-        key=lambda u: EXPORT_PATTERN.match(u).group(1),
-    )  # type: ignore[union-attr]
+        key=lambda u: EXPORT_PATTERN.match(u).group(1),  # type: ignore[union-attr]
+    )
     if not urls:
         raise MastrError("No export link found on the MaStR download page.")
     return urls[-1]

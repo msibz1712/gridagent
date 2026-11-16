@@ -394,7 +394,8 @@ def _when_step(call: ToolCallLog) -> str:
         return f"Counted {selected}"
     subject = source_label(args.get("source")) if args.get("source") else "the price"
     word = {"mean": "average", "min": "lowest", "max": "highest", "energy": "total energy"}
-    return f"Calculated the {word.get(args.get('operation'), args.get('operation'))} of "\
+    operation = str(args.get("operation"))
+    return f"Calculated the {word.get(operation, operation)} of "\
            f"{subject} in {selected}"  # fmt: skip
 
 
@@ -577,7 +578,7 @@ def charts_for_run(log: RunLog, data: DataProvider, toolbox: ToolBox | None = No
             if ref:
                 wanted += [p for p in [(ref, "price"), (ref, "residual_load")] if p not in wanted]
         if call.name in ("simulate_battery", "plan_flexible_load"):  # simulate also stores a ref
-            pairs = [(call.input.get("ref", ""), None)]
+            pairs: list[tuple[str, str | None]] = [(call.input.get("ref", ""), None)]
             if call.name == "simulate_battery":
                 try:
                     pairs.append((json.loads(call.result)["ref"], "stored_energy"))
@@ -608,7 +609,7 @@ def charts_for_run(log: RunLog, data: DataProvider, toolbox: ToolBox | None = No
             series = replay.series_for(response, source)
         except (ToolInputError, EnergyChartsError, KeyError, ValueError):
             continue  # a chart is a nice-to-have; never fail the answer for it
-        if not series.points:
+        if not series.points or series.start is None or series.end is None:
             continue
         minutes = series.interval_minutes * bucket_size(series) if series.interval_minutes else None
         charts.append(

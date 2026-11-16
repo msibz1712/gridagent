@@ -118,7 +118,10 @@ def backtest(h: History, first: date, last: date,
              forecasts: dict[date, dict[int, float]] | None = None) -> dict[str, Any]:  # fmt: skip
     """Hourly mean absolute error of the forecast and of the two baselines, day by day.
     `forecasts`, if given, receives each day's forecast (so callers need not recompute)."""
-    model, yesterday, last_week, rows = [], [], [], []
+    model: list[tuple[float, float]] = []
+    yesterday: list[tuple[float, float]] = []
+    last_week: list[tuple[float, float]] = []
+    rows: list[dict[str, Any]] = []
     for target in _days(first, last):
         forecast = forecast_day(h, target)
         if forecasts is not None:
@@ -127,7 +130,7 @@ def backtest(h: History, first: date, last: date,
             actual = h.price.get((target, hour))
             same_yesterday = h.price.get((target - timedelta(days=1), hour))
             same_last_week = h.price.get((target - timedelta(days=7), hour))
-            if None in (actual, same_yesterday, same_last_week):
+            if actual is None or same_yesterday is None or same_last_week is None:
                 continue
             model.append((predicted, actual))
             yesterday.append((same_yesterday, actual))

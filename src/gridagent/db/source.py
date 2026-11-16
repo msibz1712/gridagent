@@ -67,7 +67,7 @@ class DatabaseDataSource:
                 if cached is not None:
                     return TimeSeriesResponse.model_validate(cached)
             response = read_response(conn, table, start, end, region)
-        if key is not None and response.data:
+        if self.cache is not None and key is not None and response.data:
             self.cache.set(key, response.model_dump(mode="json"), f"db {table_name} {start}..{end}")
         if not response.data:
             # Synced, but the source has nothing there (e.g. DE-LU prices before Oct 2018):

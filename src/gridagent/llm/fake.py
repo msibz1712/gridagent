@@ -9,6 +9,7 @@ every request, so tests can check what the loop sent (e.g. tool results).
     ])
 """
 
+from collections.abc import Sequence
 from typing import Any
 
 from gridagent.llm.base import LLMError, ModelResponse, TokenUsage
@@ -27,7 +28,7 @@ class FakeLLM:
 
     def __init__(
         self,
-        turns: list[list[dict[str, Any]] | ModelResponse | Exception],
+        turns: Sequence[list[dict[str, Any]] | ModelResponse | Exception],
         model_name: str = "fake-model",
         usage: TokenUsage | None = None,
     ) -> None:

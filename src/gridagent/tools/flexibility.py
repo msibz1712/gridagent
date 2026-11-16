@@ -221,7 +221,9 @@ def plan_load(prices: Series, energy_mwh: float, max_power_mw: float) -> dict[st
     if not prices.interval_minutes:
         raise ValueError("The price data has no fixed interval.")
     interval_h = prices.interval_minutes / 60
-    known = [(i, p.value) for i, p in enumerate(prices.points) if p.value is not None]
+    known: list[tuple[int, float]] = [
+        (i, p.value) for i, p in enumerate(prices.points) if p.value is not None
+    ]
     possible = len(known) * max_power_mw * interval_h
     if energy_mwh > possible + 1e-9:
         raise ValueError(
@@ -235,7 +237,8 @@ def plan_load(prices: Series, energy_mwh: float, max_power_mw: float) -> dict[st
             break
         use[i] = min(max_power_mw * interval_h, left)
         left -= use[i]
-    cost = sum(mwh * prices.points[i].value for i, mwh in use.items())  # type: ignore[operator]
+    price_at = dict(known)
+    cost = sum(mwh * price_at[i] for i, mwh in use.items())
     even_price = sum(v for _, v in known) / len(known)  # same energy in every interval
     even_cost = energy_mwh * even_price
     return {
