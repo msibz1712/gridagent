@@ -53,13 +53,10 @@ WAIT_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 briefing when it is ready.</p></main></body></html>"""
 
 EXAMPLES = [
-    "What share of Germany's electricity came from wind last week?",
-    "What was the market value of solar power last month, compared with the official value?",
-    "How much electricity did Germany import on balance last week?",
-    "Which control area produced the most onshore wind last week?",
-    "How much solar capacity is installed, and what is the 2030 target?",
-    "For how many hours were electricity prices negative last month?",
-    "What was the CO2 intensity of German electricity in 2025?",
+    "Why were prices so high last Thursday evening?",
+    "What could a 10 MW / 20 MWh battery have earned last week?",
+    "How much onshore wind was added in NRW this year?",
+    "What share of electricity came from wind last week?",
 ]
 FAILED_ANSWER = (
     "Sorry, I couldn't answer this question right now. Please try again in a moment, "

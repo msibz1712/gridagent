@@ -220,7 +220,8 @@ function downloadCsv(chart) {
 
 // ---------- chat messages ----------
 
-const AVATAR = '<div class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>';
+// Answers are set like the dashboard's text: no avatar, a small name label above.
+const AVATAR = "";
 
 function scrollToBottom() {
   window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
@@ -248,15 +249,12 @@ function addTypingMessage() {
 function welcomeMessage() {
   const chips = (state.config?.examples || [])
     .map((q) => `<button class="chip" type="button" data-q="${esc(q)}">${esc(q)}</button>`).join("");
-  return addMessage(`${AVATAR}<div class="msg-body"><p class="msg-name">GridAgent</p>
-    <div class="msg-bubble"><h2>Hi, I'm GridAgent.</h2>
-      <p>I answer questions about Germany's electricity system: generation and demand, prices and
-      market values, cross-border flows, the four control areas and installed capacity. I calculate
-      every number from public data and tell you the period, definition and sources, so you can cite it.
-      You can ask follow-up questions too.</p>
-      <p>Try one of these:</p>
-      <div class="chips">${chips}</div>
-    </div></div>`, "msg-bot welcome");
+  return addMessage(`<p class="eyebrow">Ask GridAgent</p>
+    <h1>Ask about any day, hour or district.</h1>
+    <p class="lead">Generation and demand, prices and market values, flows, weather, power plants and
+      what flexibility is worth. Every number is calculated from public data, and every answer shows how.
+      Follow-up questions build on the conversation.</p>
+    <div class="chips">${chips}</div>`, "welcome");
 }
 
 /** Fill GridAgent's message with the answer, its charts and method. */
@@ -368,21 +366,16 @@ function newConversation() {
 function route() {
   const page = location.hash.startsWith("#/about") ? "about" : "ask";
   document.querySelectorAll(".view").forEach((v) => { v.hidden = v.id !== `view-${page}`; });
-  document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === page));
+  document.querySelectorAll("nav a[data-route]").forEach((a) => {
+    if (a.dataset.route === page) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  });
   document.body.classList.toggle("chat-mode", page === "ask");
   window.scrollTo(0, 0);
 }
 
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  try { localStorage.setItem("gridagent-theme", theme); } catch { /* storage blocked */ }
-}
-
 async function init() {
-  let theme = "light";
-  try { theme = localStorage.getItem("gridagent-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); } catch { /* ignore */ }
-  applyTheme(theme);
-  $("#theme-toggle").addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+  // Light only, like the dashboard.
   window.addEventListener("hashchange", route);
   route();
 

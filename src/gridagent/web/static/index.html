@@ -3,121 +3,103 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GridAgent · Germany's electricity system, answered with evidence</title>
-  <meta name="description" content="Ask questions about Germany's electricity generation and day-ahead prices. Answers are computed from Energy-Charts data and cite their sources.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23f59e0b' d='M13 2 4 14h7l-1 8 9-12h-7z'/%3E%3C/svg%3E">
+  <title>GridAgent — Ask</title>
+  <meta name="description" content="Ask questions about Germany's electricity system. Every number is calculated from public data and cited.">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="wrap topbar-inner">
-      <a class="brand" href="#/" aria-label="GridAgent home">
-        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
-        <span class="brand-name">GridAgent</span>
-      </a>
-      <nav class="nav" aria-label="Main">
-        <a href="/dashboard/">Dashboard</a>
-        <a href="#/" data-route="ask">Ask</a>
-        <a href="#/about" data-route="about">About</a>
-      </nav>
-      <button class="icon-btn" id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
-      </button>
-    </div>
+  <header class="top">
+    <nav class="wrap" aria-label="Main">
+      <a class="brand" href="/dashboard/">GridAgent</a>
+      <a href="/dashboard/">Today</a>
+      <a href="/dashboard/archive.html">Archive</a>
+      <a href="/dashboard/#nrw">NRW</a>
+      <a href="/dashboard/about.html">About</a>
+      <a href="#/" data-route="ask" aria-current="page">Ask</a>
+      <a class="top-note" href="#/about" data-route="about">How the chat works</a>
+    </nav>
   </header>
 
   <main>
-    <!-- ASK: a chat -->
+    <!-- ASK: a conversation -->
     <section class="view chat-view" id="view-ask" hidden>
       <div class="chat-column">
         <div class="chat-toolbar" id="chat-toolbar" hidden>
-          <span class="muted small" id="turn-counter"></span>
-          <button class="btn btn-small" id="new-conversation" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
+          <span class="fine" id="turn-counter"></span>
+          <button class="pill" id="new-conversation" type="button">New chat</button>
         </div>
         <div class="thread" id="thread" aria-live="polite"></div>
       </div>
 
       <div class="composer">
         <div class="chat-column">
-          <div class="notice" id="unavailable" hidden>The assistant is not available right now. Please try again later.</div>
+          <div class="notice" id="unavailable" hidden>The chat is not available right now. Please try again later.</div>
           <form class="composer-box" id="ask-form" autocomplete="off">
+            <label for="question" class="visually-hidden">Your question</label>
             <textarea id="question" rows="1" maxlength="500"
-                      placeholder="Ask about Germany's electricity system…" aria-label="Your message"></textarea>
-            <button class="send-btn" id="ask-btn" type="submit" aria-label="Send">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-            </button>
+                      placeholder="Ask about any day, hour or district…"></textarea>
+            <button class="send-btn" id="ask-btn" type="submit">Ask</button>
           </form>
-          <p class="composer-note">Every number is calculated from public data (Energy-Charts, SMARD) and cited. Enter to send, Shift+Enter for a new line. Chats are deleted after 30 minutes.</p>
+          <p class="composer-note">Every number is calculated from public data and cited. Enter to send,
+            Shift+Enter for a new line. Chats are deleted after 30 minutes.</p>
         </div>
       </div>
     </section>
 
-    <!-- ABOUT -->
+    <!-- HOW THE CHAT WORKS -->
     <section class="view" id="view-about" hidden>
-      <div class="wrap narrow prose">
-        <p class="eyebrow">About</p>
-        <h1>How GridAgent works</h1>
+      <div class="wrap section prose">
+        <p class="eyebrow">How the chat works</p>
+        <h1>Ask, and see how it was calculated.</h1>
         <p class="lead">GridAgent answers factual questions about Germany's electricity system. It retrieves
-          public data, calculates the result and tells you exactly which period and sources the answer is based on.</p>
+          public data, calculates the result in code and tells you which period, definition and sources the
+          answer is based on.</p>
 
         <div class="about-grid">
-          <div class="card">
-            <h3>What you can ask</h3>
+          <div>
+            <h2>What you can ask</h2>
             <ul>
-              <li>Generation by source and electricity demand, as public net generation or including industrial self-supply</li>
-              <li>Shares, e.g. renewables in generation or in demand</li>
-              <li>Day-ahead prices: averages, highs and lows, hours above or below a price, and market values (capture prices) of solar and wind</li>
-              <li>Cross-border flows with each neighbour, physical and commercial</li>
-              <li>The four transmission control areas: 50Hertz, Amprion, TenneT and TransnetBW</li>
-              <li>Installed capacity, the 2030 expansion targets and capacity factors</li>
-              <li>Official figures: CO₂ factor of the electricity mix, official renewable shares, EEG market values</li>
+              <li>Generation by source, demand and shares, for any period</li>
+              <li>Day-ahead prices: averages, highs and lows, negative hours, market values of solar and wind</li>
+              <li>Why a price was unusually high or low in certain hours</li>
+              <li>Cross-border flows and the prices of neighbouring countries</li>
+              <li>The four transmission control areas and weather (wind, sun)</li>
+              <li>Power plants by state, district and municipality, from the plant register</li>
+              <li>What a battery would have earned, and the cheapest hours to use power</li>
             </ul>
           </div>
-          <div class="card">
-            <h3>Data sources</h3>
-            <ul>
-              <li><a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts.info</a> by Fraunhofer ISE: public net electricity generation, 15-minute resolution (CC BY 4.0)</li>
-              <li><a href="https://www.smard.de" target="_blank" rel="noopener">SMARD.de</a> by Bundesnetzagentur: day-ahead prices (via Energy-Charts) and data per control area (CC BY 4.0)</li>
-              <li>Official statistics, quoted with their status: <a href="https://www.umweltbundesamt.de" target="_blank" rel="noopener">Umweltbundesamt</a>, BDEW / AG Energiebilanzen, and the transmission system operators on <a href="https://www.netztransparenz.de" target="_blank" rel="noopener">netztransparenz.de</a></li>
-            </ul>
-          </div>
-          <div class="card">
-            <h3>Method</h3>
+          <div>
+            <h2>Method</h2>
             <ul>
               <li>Every number is calculated from the retrieved data, never estimated</li>
-              <li>Energy is the sum of 15-minute power values × 0.25 h</li>
-              <li>Shares follow Energy-Charts' definition: public net generation, excluding pumped-storage output; 50% of waste counts as renewable</li>
-              <li>Market value (capture price) = day-ahead price weighted by the technology's generation, as in the EEG</li>
-              <li>Capacity factor = generation ÷ (installed capacity at the start of the period × hours)</li>
-              <li>Where an official figure exists, it is shown next to the calculated one with its definition and status</li>
+              <li>Each answer lists its steps under “How this was calculated”, with its sources and licences</li>
+              <li>Where an official figure exists, it is shown with its definition and status</li>
+              <li>Associations are described as associations, not as causes</li>
               <li>Dates refer to German local time; “last week” means Monday to Sunday</li>
             </ul>
           </div>
-          <div class="card">
-            <h3>Limits</h3>
+          <div>
+            <h2>Limits</h2>
             <ul>
-              <li>Germany only, historical data only: no forecasts</li>
-              <li>Control areas are grid regions, not federal states</li>
+              <li>Germany and its neighbours; past data, plus published prices and forecasts</li>
               <li>No investment, trading or tariff advice</li>
-              <li>Recent data is preliminary and can be revised by the data provider</li>
+              <li>Recent data is preliminary and can be revised by the publishers</li>
               <li>At most about three months per question</li>
             </ul>
           </div>
         </div>
-        <p class="muted small">GridAgent uses an AI assistant to interpret your question and present the result; the
-          calculations themselves are done by deterministic code. Please check important figures against the original
-          sources linked with each answer. You can ask follow-up questions; a conversation is kept in memory for
-          30 minutes (or until you start a new one) and then deleted. Questions are logged to monitor quality.</p>
+        <p class="fine">An AI assistant interprets your question and writes the answer; the calculations are
+          done by deterministic code, and every number in an answer is checked against the calculated results.
+          Please check important figures against the linked sources. Questions are logged to monitor quality.</p>
       </div>
     </section>
   </main>
 
-  <footer class="footer">
-    <div class="wrap footer-inner">
-      <span>Data: <a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts.info</a> (Fraunhofer ISE) · Prices: Bundesnetzagentur | SMARD.de · CC BY 4.0</span>
-      <span class="muted" id="footer-note"></span>
-    </div>
+  <footer class="wrap foot">
+    <div><p class="title">Sources and licences</p>
+      <p>Energy-Charts.info (Fraunhofer ISE), CC BY 4.0 · Bundesnetzagentur | SMARD.de, CC BY 4.0 ·
+        Deutscher Wetterdienst, CC BY 4.0 · Marktstammdatenregister, © Bundesnetzagentur, dl-de/by-2-0.</p></div>
+    <div><p class="title">GridAgent</p><p id="footer-note">Figures calculated in code; answers checked number by number.</p></div>
   </footer>
 
   <script src="/static/app.js"></script>
