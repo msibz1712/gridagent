@@ -16,6 +16,7 @@ from gridagent.data.dwd import DwdClient, fetch_weather
 from gridagent.data.mastr import load_register
 from gridagent.data.models import DataRow, SeriesInfo, TimeSeriesResponse
 from gridagent.data.netztransparenz import Measure, NetztransparenzClient
+from gridagent.data.openmeteo import OpenMeteoClient, capacity_weights, national
 from gridagent.data.smard import SMARD_BASE_URL, SmardClient
 
 
@@ -45,6 +46,10 @@ class DataProvider(Protocol):
     def plant_register(self) -> dict[str, Any]: ...
 
     def forecast(self, start: date, end: date) -> TimeSeriesResponse: ...
+
+    def weather_forecast(
+        self, start: date, end: date, lead_days: int | None = None
+    ) -> TimeSeriesResponse: ...
 
 
 def month_chunks(start: date, end: date, today: date) -> list[tuple[date, date]]:
@@ -108,6 +113,7 @@ class LiveDataSource:
         self._ntp_cache = ResponseCache(cache_dir / "netztransparenz")
         self.register_file = cache_dir / "mastr" / "register.json.gz"
         self._register: dict[str, Any] | None = None
+        self.open_meteo = OpenMeteoClient(cache=ResponseCache(cache_dir / "open_meteo"))
         self._ntp: NetztransparenzClient | None = None
 
     def public_power(self, start: date, end: date, country: str = "de") -> TimeSeriesResponse:
@@ -159,6 +165,18 @@ class LiveDataSource:
             raise NoDataError(f"No forecast published for {start} to {end}.")
         rows = [r for m in merged for r in m.data if start <= r.timestamp.date() <= end]
         return merged[0].model_copy(update={"data": rows})
+
+    def weather_forecast(
+        self, start: date, end: date, lead_days: int | None = None
+    ) -> TimeSeriesResponse:
+        """Open-Meteo national indicators (data/openmeteo.py): the latest forecast, or as
+        issued `lead_days` before. Weighted by the plant register when it is available."""
+        try:
+            register = self.plant_register()
+        except NoDataError:
+            register = None
+        points = self.open_meteo.points(start, end, lead_days)
+        return national(points, *capacity_weights(register), lead_days)
 
     def plant_register(self) -> dict[str, Any]:
         """The MaStR aggregate built by `garden mastr sync` (read once, then kept in memory)."""

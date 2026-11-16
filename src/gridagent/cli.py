@@ -916,3 +916,24 @@ def today(
     console.print(f"Page: {page}")
     if open_browser:
         webbrowser.open(page.as_uri())
+
+
+@app.command("forecast-skill")
+def forecast_skill(
+    start: Annotated[str, typer.Option(help="First day (YYYY-MM-DD).")],
+    end: Annotated[str, typer.Option(help="Last day.")],
+    fixtures: Annotated[bool, typer.Option("--fixtures", help="Use recorded data.")] = False,
+) -> None:
+    """How good is the weather forecast 1..7 days ahead? (correlation with actual output)"""
+    from gridagent.monitor.forecast_skill import lead_skill
+
+    data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"), _db_url())
+    leads = range(1, 2) if fixtures else range(1, 8)
+    rows = lead_skill(data, date.fromisoformat(start), date.fromisoformat(end), leads)
+    table = Table("forecast", "days ahead", "wind: r", "solar: r", title=f"{start} to {end}")
+    for row in rows:
+        r = lambda v: "-" if v is None else f"{v:.3f}"  # noqa: E731
+        table.add_row(row["forecast"], str(row["lead_days"]), r(row["wind_r"]), r(row["solar_r"]))
+    console.print(table)
+    console.print("[dim]Daily values: forecast daily mean vs actual daily energy (Energy-Charts). "
+                  "Weather: Open-Meteo.com, CC BY 4.0.[/]")  # fmt: skip

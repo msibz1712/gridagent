@@ -64,6 +64,18 @@ class FixtureDataSource:
     def forecast(self, start: date, end: date) -> TimeSeriesResponse:
         return self._find("forecast", start, end)
 
+    def weather_forecast(
+        self, start: date, end: date, lead_days: int | None = None
+    ) -> TimeSeriesResponse:
+        """Recorded Open-Meteo indicators: one file per lead time (`lead_days` in the name)."""
+        name = f"weather_forecast_lead{lead_days or 0}"
+        for response in self.responses:
+            if response.endpoint == "weather_forecast" and response.attributes.get("file") == name:
+                rows = [r for r in response.data if start <= r.timestamp.date() <= end]
+                if rows and rows[0].timestamp.date() <= start and rows[-1].timestamp.date() >= end:
+                    return response.model_copy(update={"data": rows})
+        raise NoDataError(f"No recorded Open-Meteo forecast ({name}) for {start} to {end}.")
+
     def plant_register(self) -> dict[str, Any]:
         """A real excerpt of the register (see fixtures/mastr/README.md)."""
         file = self.directory / "mastr" / "register_excerpt.json.gz"

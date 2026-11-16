@@ -177,6 +177,9 @@ class HybridDataSource:
     def forecast(self, start: date, end: date) -> TimeSeriesResponse:
         return self.live.forecast(start, end)  # forecasts are not stored
 
+    def weather_forecast(self, start: date, end: date, lead_days: int | None = None):
+        return self.live.weather_forecast(start, end, lead_days)
+
     def plant_register(self):
         try:
             data = self.database.plant_register()
