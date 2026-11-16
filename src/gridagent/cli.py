@@ -771,7 +771,8 @@ def brief(
         raise typer.Exit(code=1) from exc
 
     if explain and not os.environ.get("ANTHROPIC_API_KEY"):
-        console.print("[yellow]ANTHROPIC_API_KEY not set: briefing without explanations.[/]")
+        console.print("[yellow]ANTHROPIC_API_KEY not set: briefing without explanations; "
+                      "the story is the template version.[/]")  # fmt: skip
         explain = False
     if explain:
         loaded = resolve(_agents_dir(), "energy_qa")
@@ -780,7 +781,23 @@ def brief(
             explain_events(briefing, loaded, lambda: build_llm(loaded.config), data, now,
                            max_cost, on_run=lambda log: append_run_log(log_path, log))  # fmt: skip
 
+    from gridagent.monitor.writer import template_story, write_story
+
+    if explain:
+        writer = resolve(_agents_dir(), "news_writer")
+        with console.status("Writing the story..."):
+            story = write_story(briefing, writer, build_llm(writer.config))
+        briefing.cost_usd = round(briefing.cost_usd + story.cost_usd, 4)
+    else:
+        story = template_story(briefing)
+    briefing.story = story.model_dump()
+
     path = save_briefing(_path("GARDEN_REPORTS_DIR", "reports") / "briefings", briefing)
+    by = "the model" if story.written_by == "model" else "the template"
+    console.print(Panel("\n\n".join([story.standfirst, *story.paragraphs]),
+                        title=story.headline, subtitle=f"written by {by}"))  # fmt: skip
+    for problem in story.problems:
+        console.print(f"[yellow]Model draft rejected:[/] {problem}")
     table = Table("figure", "value", "4-week normal", title=f"Briefing for {reviewed}")
     for f in briefing.figures:
         change = f" ({f.change_pct:+.0f} %)" if f.change_pct is not None else ""
@@ -801,7 +818,7 @@ def brief(
                       f"{plan.battery_profit_eur_per_mw} EUR")  # fmt: skip
     for missing in briefing.not_available:
         console.print(f"[yellow]Not available:[/] {missing}")
-    console.print(f"[dim]Saved to {path} (explanations: ${briefing.cost_usd:.4f})[/]")
+    console.print(f"[dim]Saved to {path} (model cost: ${briefing.cost_usd:.4f})[/]")
 
 
 @app.command()

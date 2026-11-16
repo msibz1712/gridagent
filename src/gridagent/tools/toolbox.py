@@ -192,7 +192,8 @@ class ToolBox:
     ) -> None:
         self.data = data
         self.today = today
-        self.enabled = enabled or list(ALL_TOOLS)
+        # None = every tool; an empty list means none (never 'all' by accident)
+        self.enabled = list(ALL_TOOLS) if enabled is None else enabled
         unknown = set(self.enabled) - set(ALL_TOOLS)
         if unknown:
             raise ValueError(f"Unknown tools: {sorted(unknown)}")

@@ -277,3 +277,12 @@ def test_non_strict_tools_reject_unknown_fields(box: ToolBox, name: str) -> None
     """Without grammar enforcement, the ToolBox's own validation is the guard."""
     result = box.execute(name, {"ref": "price_1", "surprise": 1})
     assert result.is_error and "Invalid input" in result.content
+
+
+def test_an_agent_without_tools_gets_none_not_all() -> None:
+    """Tool-less agents (the news writer) are allowed; [] must never mean 'every tool'."""
+    from gridagent.data.fixture_source import FixtureDataSource
+
+    from conftest import FIXTURE_DIR
+
+    assert ToolBox(FixtureDataSource(FIXTURE_DIR), today=date.today, enabled=[]).definitions() == []

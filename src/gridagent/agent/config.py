@@ -49,7 +49,8 @@ class AgentConfig(BaseModel):
     description: str = Field(min_length=10, max_length=300)
     owner: str = Field(min_length=1)
     model: ModelConfig
-    tools: list[str] = Field(min_length=1)
+    # Empty for an agent that only works from its input (e.g. the news writer).
+    tools: list[str] = []
     limits: LimitsConfig = LimitsConfig()
     system_prompt_file: str = "system_prompt.md"
     eval_set: str | None = None  # path relative to the agent folder, e.g. ../evals.yaml

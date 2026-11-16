@@ -78,6 +78,7 @@ class Briefing(BaseModel):
     not_available: list[str] = []
     sources: list[str]
     cost_usd: float = 0.0
+    story: dict[str, Any] | None = None  # the news story (monitor/writer.py)
 
 
 # ---------- helpers ----------

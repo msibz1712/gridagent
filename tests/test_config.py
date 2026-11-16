@@ -54,7 +54,6 @@ def test_valid_config_loads_with_defaults(tmp_path: Path) -> None:
         ({"model": {"name": "claude-haiku-5-5", "temperature": 0}}, "unknown field (typo?)"),
         ({"tools": ["get_stock_prices"]}, "unknown tool(s) ['get_stock_prices']"),
         ({"tools": ["compute_stats", "compute_stats"]}, "duplicates"),
-        ({"tools": []}, "tools"),
         ({"description": "short"}, "description"),
         ({"limits": {"max_steps": 0}}, "limits.max_steps"),
         ({"owner_email": "x"}, "owner_email: unknown field"),
