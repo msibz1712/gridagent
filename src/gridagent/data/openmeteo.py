@@ -84,7 +84,8 @@ class OpenMeteoClient:
         }  # fmt: skip
         url = PREVIOUS_RUNS_URL if lead_days else FORECAST_URL
         key = ResponseCache.make_key(url, params)
-        max_age = None if end < self.today() else 3 * 3600  # forecasts change; the past not
+        # Forecasts change with every run (a few hours); a past period does not.
+        max_age = None if end < self.today() else timedelta(hours=3)
         if self.cache is not None:
             cached = self.cache.get(key, max_age)
             if cached is not None:

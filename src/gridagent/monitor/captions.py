@@ -92,3 +92,16 @@ def nrw_caption(nrw: dict[str, Any]) -> str:
         text += f", after {_num(years[year - 1], 0)} MW in {year - 1}"
     return text + (f". Plant register of {_day(nrw['register_date'])}; recent months are "
                    "revised upward as late registrations arrive.")  # fmt: skip
+
+
+def week_caption(week: dict[str, Any]) -> str:
+    """The windiest and calmest of the reliable days (up to 4 days ahead), against normal."""
+    reliable = [d for d in week["days"] if d["reliability"] != "rough indication"]
+    if not reliable:
+        return ""
+    windy = max(reliable, key=lambda d: d["wind_gwh"])
+    calm = min(reliable, key=lambda d: d["wind_gwh"])
+    return (f"Most wind is expected on {_day(windy['date'])} (about {windy['wind_gwh']:,} GWh), "
+            f"the least on {_day(calm['date'])} (about {calm['wind_gwh']:,} GWh); a normal day "
+            f"of the past four weeks had about {week['normal_wind_gwh']:,} GWh. Forecasts five "
+            "or more days ahead are a rough indication.")  # fmt: skip

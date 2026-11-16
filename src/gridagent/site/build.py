@@ -31,6 +31,7 @@ from gridagent.monitor.captions import (
     lead_caption,
     nrw_caption,
     plan_caption,
+    week_caption,
 )
 from gridagent.monitor.daily import Briefing
 
@@ -178,6 +179,39 @@ def _today(b: dict[str, Any]) -> str:
 </div></section>"""  # noqa: E501
 
 
+def _week(b: dict[str, Any]) -> str:
+    week = b.get("week")
+    if not week:
+        return ""
+    days = week["days"]
+    top = max([d["wind_gwh"] for d in days] + [week["normal_wind_gwh"], 1])
+    cols = []
+    for d in days:
+        rough = d["reliability"] == "rough indication"
+        height = 100 * d["wind_gwh"] / top
+        dt = date.fromisoformat(d["date"])
+        cols.append(f"""<li class="day{" rough" if rough else ""}">
+  <p class="dname">{"Today" if d["days_ahead"] == 0 else f"{dt:%a}"} <span>{dt.day} {dt:%b}</span></p>
+  <div class="wbar" role="img" aria-label="About {d["wind_gwh"]:,} GWh of wind"><div style="height:{height:.0f}%"></div></div>
+  <p class="wval">{d["wind_gwh"]:,} <small>GWh wind</small></p>
+  <p class="fine">{d["solar_gwh"]:,} GWh solar · {d["temperature_c"]:.1f} °C</p>
+  <p class="tag">{esc(d["reliability"])}{" · grid operators" if d.get("source", "").startswith("grid") else ""}</p>
+</li>""")
+    normal = 100 * week["normal_wind_gwh"] / top
+    cal = week["calibration"]
+    return f"""<section class="wrap section">
+  <p class="eyebrow">The week ahead</p>
+  <h2>Wind and sun, the next seven days.</h2>
+  <p class="lead small">{esc(week_caption(week))}</p>
+  <ol class="week" style="--normal:{normal:.0f}%">{"".join(cols)}</ol>
+  <p class="fine">Expected energy from Open-Meteo weather forecasts (CC BY 4.0), turned into GWh with a
+  curve fitted on the last {cal["days"]} days (wind r = {cal["wind_r"]}, solar r = {cal["solar_r"]}).
+  Today and tomorrow use the grid operators' day-ahead forecast where it is published (more accurate).
+  Grey line: a normal day of the past four weeks. Measured accuracy: reliable up to four days ahead,
+  then a rough indication.</p>
+</section>"""
+
+
 def _four_weeks(b: dict[str, Any]) -> str:
     days = [d for d in b.get("daily", []) if "price_mean" in d]
     if len(days) < 7:
@@ -291,6 +325,7 @@ def page(b: dict[str, Any], ai_story: bool, root: str, days: list[str]) -> str:
 {_lead(b, ai_story)}
 {_kpis(b)}
 {_today(b)}
+{_week(b)}
 {_four_weeks(b)}
 {_events(b, ai_story)}
 {_nrw(b)}
@@ -307,7 +342,8 @@ def footer(root: str) -> str:
   <div><p class="title">Sources and licences</p>
   <p>Generation, load, flows and forecasts: Energy-Charts.info (Fraunhofer ISE), CC BY 4.0 ·
   Day-ahead prices: Bundesnetzagentur | SMARD.de, CC BY 4.0 · Power plants:
-  Marktstammdatenregister, © Bundesnetzagentur, dl-de/by-2-0.</p></div>
+  Marktstammdatenregister, © Bundesnetzagentur, dl-de/by-2-0 · Weather forecasts:
+  Open-Meteo.com, CC BY 4.0.</p></div>
   <div><p class="title">How this page is made</p>
   <p>Figures and events are calculated in code each morning; "normal" means the four weeks
   before. <a href="{root}about.html">Method and AI use</a>.</p></div>

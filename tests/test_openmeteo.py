@@ -85,3 +85,12 @@ def test_recorded_forecasts_track_actual_wind() -> None:
     operators, open_meteo = rows
     assert operators["wind_r"] > open_meteo["wind_r"] > 0.9  # operators' forecast is better
     assert correlation({1: 1.0}, {1: 1.0}) == (None, 1)  # too few days: no claim
+
+
+def test_a_future_period_is_cached_for_a_few_hours(tmp_path) -> None:
+    """The cache's max age is a timedelta: an int crashed on the second request."""
+    http, seen = fake_api()
+    client = OpenMeteoClient(ResponseCache(tmp_path), http, today=lambda: date(2026, 11, 16))
+    for _ in range(2):
+        client.points(date(2026, 11, 16), date(2026, 11, 22), lead_days=None)
+    assert len(seen) == 1

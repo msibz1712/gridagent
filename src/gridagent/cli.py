@@ -821,6 +821,10 @@ def brief(
         console.print(f"[bold]• {event.title}[/]")
         if event.explanation:
             console.print(Panel(event.explanation, border_style="dim"))
+    if briefing.week:
+        days = ", ".join(f"{d['date'][5:]} {d['wind_gwh']} GWh ({d['reliability']})"
+                         for d in briefing.week["days"])  # fmt: skip
+        console.print(f"[cyan]Week ahead, wind:[/] {days}")
     for expected in briefing.outlooks:
         console.print(f"[cyan]{expected.day} forecast:[/] {expected.headline}; peak residual "
                       f"load {expected.peak_residual_load_gw} GW")  # fmt: skip

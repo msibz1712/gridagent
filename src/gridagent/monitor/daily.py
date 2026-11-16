@@ -22,6 +22,7 @@ from gridagent.data.sources import source_series
 from gridagent.monitor.anomalies import Story, day_stories, load_history
 from gridagent.monitor.forecasts import Outlook, outlook
 from gridagent.monitor.nrw import nrw_snapshot
+from gridagent.monitor.week import week_outlook
 from gridagent.tools.flexibility import Battery, simulate_battery
 from gridagent.tools.investigate import BERLIN, hourly
 from gridagent.tools.register import PlantRegister
@@ -84,6 +85,7 @@ class Briefing(BaseModel):
     # For charts: one entry per day of the 4 weeks before and the day itself
     daily: list[dict[str, Any]] = []
     nrw: dict[str, Any] | None = None  # plant register snapshot (monitor/nrw.py)
+    week: dict[str, Any] | None = None  # 7-day outlook from Open-Meteo (monitor/week.py)
     story: dict[str, Any] | None = None  # the news story (monitor/writer.py)
 
 
@@ -295,11 +297,15 @@ def build_briefing(data: DataProvider, day: date, today: date,
     except (NoDataError, EnergyChartsError, KeyError, ValueError):
         nrw = None
         not_available.append("plant register")
+    week = week_outlook(data, today, {o.day: (o.wind_gwh, o.solar_gwh) for o in outlooks})
+    if week is None:
+        not_available.append("7-day weather outlook")
     return Briefing(
         day=day.isoformat(),
         generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
         daily=daily,
         nrw=nrw,
+        week=week,
         figures=figures,
         events=events,
         plans=plans,
