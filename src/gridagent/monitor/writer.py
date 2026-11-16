@@ -22,19 +22,24 @@ from gridagent.agent.config import LoadedAgent
 from gridagent.llm.base import LLM, LLMError, TokenUsage
 from gridagent.llm.pricing import estimate_cost_usd
 from gridagent.monitor.daily import Briefing
-from gridagent.tools.grounding import unsupported_numbers
+from gridagent.tools.grounding import NUMBER, unsupported_numbers, without_dates
 
 HEADLINE_MAX = 80
 STANDFIRST_MAX_WORDS = 35
+PARAGRAPH_MAX_WORDS = 90  # the guide says 80; a little slack before rejecting
+PARAGRAPH_MAX_NUMBERS = 6  # the guide says five
 CAUSAL = ("caused", "causing", "because of", "due to", "led to", "drove", "driven by",
           "triggered", "as a result of", "resulted in")  # fmt: skip
 # Whole words only ("ever" must not catch "every"), so each form is listed.
 HYPE = (
     "massive", "huge", "shocking", "skyrocketed", "skyrocketing", "soared", "soaring",
     "plummeted", "plummeting", "plunged", "plunging", "crashed", "exploded", "unprecedented",
-    "dramatic", "dramatically", "historic", "all-time", "ever",
+    "dramatic", "dramatically", "historic", "all-time", "ever", "record", "records",
+    "record-breaking",
 )  # fmt: skip
 QUOTES = ('"', "“", "”", "„", "«", "»")
+# The reader never sees the inputs, and "since at least" is not where the data starts.
+META = ("fact sheet", "the analysis", "data provided", "start of the data", "first data")
 
 PUBLISH_STORY: dict[str, Any] = {
     "name": "publish_story",
@@ -114,15 +119,10 @@ def fact_sheet(briefing: Briefing) -> dict[str, Any]:
 # ---------- 3. the desk editor's checks ----------
 
 
-def check_story(story: NewsStory, sheet_text: str) -> list[str]:
-    """Every rule the story breaks, as sentences the writer can act on."""
+def language_problems(text: str) -> list[str]:
+    """Wording rules every published text follows (story and explanations alike)."""
     problems = []
-    text = story.text()
     lowered = text.lower()
-    unbacked = unsupported_numbers(text, [sheet_text], [])
-    if unbacked:
-        problems.append(f"Numbers not in the fact sheet: {', '.join(unbacked)}. Use only "
-                        "fact-sheet numbers; do not calculate.")  # fmt: skip
     causal = [w for w in CAUSAL if re.search(rf"\b{re.escape(w)}\b", lowered)]
     if causal:
         problems.append(f"Causal wording ({', '.join(causal)}): write 'coincided with' or "
@@ -132,6 +132,28 @@ def check_story(story: NewsStory, sheet_text: str) -> list[str]:
         problems.append(f"Hype words ({', '.join(hype)}): use plain words.")
     if any(q in text for q in QUOTES):
         problems.append("Quotation marks: the story must not quote anyone.")
+    meta = [w for w in META if w in lowered]
+    if meta:
+        problems.append(f"Wording about the inputs ({', '.join(meta)}): write about the market.")
+    return problems
+
+
+def check_story(story: NewsStory, sheet_text: str) -> list[str]:
+    """Every rule the story breaks, as sentences the writer can act on."""
+    text = story.text()
+    problems = []
+    unbacked = unsupported_numbers(text, [sheet_text], [])
+    if unbacked:
+        problems.append(f"Numbers not in the fact sheet: {', '.join(unbacked)}. Use only "
+                        "fact-sheet numbers; do not calculate.")  # fmt: skip
+    problems += language_problems(text)
+    for i, paragraph in enumerate(story.paragraphs, 1):
+        words = len(paragraph.split())
+        numbers = len(NUMBER.findall(without_dates(paragraph)))
+        if words > PARAGRAPH_MAX_WORDS:
+            problems.append(f"Paragraph {i} has {words} words; at most 80.")
+        if numbers > PARAGRAPH_MAX_NUMBERS:
+            problems.append(f"Paragraph {i} has {numbers} numbers; keep the five that matter.")
     if len(story.headline) > HEADLINE_MAX:
         problems.append(f"Headline is {len(story.headline)} characters; at most {HEADLINE_MAX}.")
     if len(story.standfirst.split()) > STANDFIRST_MAX_WORDS:
@@ -158,6 +180,9 @@ def write_story(briefing: Briefing, agent: LoadedAgent, llm: LLM) -> NewsStory:
             problems = [f"model error: {exc}"]
             break
         usage = usage + response.usage
+        if response.stop_reason == "max_tokens":
+            problems = ["the model ran out of tokens before finishing (max_tokens)"]
+            break  # a cut-off tool input is never published, not even repaired
         calls = response.tool_uses()
         if not calls:
             problems = ["the model answered without publishing a story"]

@@ -32,4 +32,6 @@ fact sheet is published instead and the rejected draft's problems are recorded.
 
 | Version | Changes |
 |---|---|
+| 0.3.0 | After reviewing 0.2.0's live stories: never mention the inputs (one paragraph said "the fact sheet does not show"); "since at least" is never "the start of the data" (the fact-sheet field was renamed to say what it is); published day-ahead prices are results, not expectations. |
+| 0.2.0 | After the first live stories (15 Nov, 9 Nov, 24 Oct): max_tokens 8000 (2000 ran out while thinking, so one draft arrived with only a headline); at most 80 words and five numbers per paragraph (paragraphs had become number lists); "record" banned (a headline said "sets a record" for "highest since at least"). |
 | 0.1.0 | First version: Haiku 5.5, style guide, `publish_story`, one revision, template fallback. |

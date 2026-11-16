@@ -59,6 +59,7 @@ class Story(BaseModel):
     explained_by_fundamentals: bool | None = None  # price stories only
     explanation: str | None = None  # by the model (monitor/explain.py)
     explanation_steps: list[str] = []
+    explanation_problems: list[str] = []  # why a model explanation was not published
 
 
 # ---------- small statistics ----------
@@ -155,17 +156,19 @@ def price_stories(day: date, price: Series, residual_load: Series | None) -> lis
         normal = [prices[(d, hour)] for d in comparable if (d, hour) in prices]
         if len(normal) < 5:
             continue
+        # Detect with median and MAD (robust); show the mean, the "usual" figure the
+        # investigator reports too, so a page never shows two different normals.
         center, scale = median(normal), robust_scale(normal)
         value = prices[(day, hour)]
         z = (value - center) / scale if scale else 0.0
-        info = {"price": value, "normal": center, "z": z}
+        info = {"price": value, "normal": sum(normal) / len(normal), "z": z}
         if curve is not None and (day, hour) in residual:
             x = residual[(day, hour)] / 1000
             info |= {"residual_gw": x, "expected": _curve(curve, x),
                      "gap_z": (value - _curve(curve, x) - gap_center) / gap_scale}  # fmt: skip
-        if z >= PRICE_Z and value - center >= PRICE_MIN_EUR:
+        if z >= PRICE_Z and value - info["normal"] >= PRICE_MIN_EUR:
             flagged["spike"][hour] = info
-        elif z <= -PRICE_Z and center - value >= PRICE_MIN_EUR:
+        elif z <= -PRICE_Z and info["normal"] - value >= PRICE_MIN_EUR:
             flagged["dip"][hour] = info
 
     stories = []
@@ -374,7 +377,9 @@ def record_stories(day: date, history: dict[date, dict]) -> list[Story]:
                        "unit": unit, "direction": word,
                        "previous_date": last_beaten.isoformat() if last_beaten else None,
                        "previous_value": round(history[last_beaten][key], 2) if last_beaten
-                       else None, "days_spanned": span, "data_since": first_day.isoformat()},
+                       else None, "days_spanned": span,
+                       # how far back this comparison went, not where the data starts
+                       "compared_back_to": first_day.isoformat()},
                 title=f"{label.capitalize()} {value:.2f} {unit}: {phrase}",
             ))  # fmt: skip
     return stories

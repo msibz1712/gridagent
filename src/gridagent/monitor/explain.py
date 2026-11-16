@@ -37,6 +37,7 @@ def explain_events(
     on_run: Callable[[RunLog], None] = lambda log: None,
 ) -> None:
     """Ask the agent about the biggest price events (at most EXPLAIN_EVENTS) within budget."""
+    from gridagent.monitor.writer import language_problems
     from gridagent.services import method_steps  # services imports a lot; only needed here
 
     day = date.fromisoformat(briefing.day)
@@ -48,6 +49,12 @@ def explain_events(
         on_run(log)
         spent += log.cost_usd or 0.0
         if log.status == "ok" and log.final_answer:
+            # Published next to the story, so it follows the same wording rules
+            # (a live run wrote "the main driver was very strong wind").
+            problems = language_problems(log.final_answer)
+            if problems:
+                event.explanation_problems = problems
+                continue
             event.explanation = log.final_answer
             event.explanation_steps = method_steps(log)
     briefing.cost_usd = round(spent, 4)

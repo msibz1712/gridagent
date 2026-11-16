@@ -21,7 +21,7 @@ from gridagent.monitor.writer import (
 from conftest import FIXTURE_DIR
 
 AGENTS = Path(__file__).parent.parent / "agents"
-WRITER = resolve(AGENTS, "news_writer@0.1.0")
+WRITER = resolve(AGENTS, "news_writer@0.3.0")
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +34,7 @@ def draft(**changes) -> dict:
     story = {
         "headline": "Evening prices nearly double as wind fades",
         "standfirst": "Between 13:00 and 20:00 the price averaged 394.56 €/MWh, against a usual "
-        "191.47 for those hours on comparable weekdays.",
+        "183.05 for those hours on comparable weekdays.",
         "paragraphs": [
             "The day-ahead price averaged 314.85 €/MWh, against 157.82 on a normal day.",
             "Wind produced 100.70 GWh, against 505.51; the price was higher than the residual "
@@ -64,6 +64,12 @@ def test_a_clean_draft_passes(briefing) -> None:
     ({"headline": 'Traders said "ouch"'}, "Quotation marks"),
     ({"headline": "Evening " * 12}, "Headline is"),
     ({"paragraphs": ["Only one paragraph."]}, "1 paragraphs"),
+    ({"headline": "Wind output sets a record"}, "Hype words (record)"),
+    ({"headline": "The fact sheet does not show the cause"}, "Wording about the inputs"),
+    ({"headline": "Highest since at least 2024, the start of the data"}, "start of the data"),
+    ({"paragraphs": ["Wind " * 95, "Two.", "Three."]}, "Paragraph 1 has 95 words"),
+    ({"paragraphs": ["314.85, 157.82, 100.70, 505.51, 394.56, 183.05 and 98.", "Two.",
+                     "Three."]}, "Paragraph 1 has 7 numbers"),
 ])  # fmt: skip
 def test_the_desk_rejects(briefing, changes: dict, problem: str) -> None:
     problems = check_story(NewsStory(**draft(**changes)), sheet(briefing))
@@ -115,3 +121,26 @@ def test_a_text_answer_is_asked_to_publish(briefing) -> None:
 
 def test_the_writer_is_a_registered_agent_without_data_tools() -> None:
     assert WRITER.config.tools == [] and "publish_story" in WRITER.system_prompt
+
+
+def test_a_cut_off_answer_is_never_published(briefing) -> None:
+    """Live run of 0.1.0: thinking used up max_tokens, the draft had only a headline."""
+    from gridagent.llm.base import ModelResponse, TokenUsage
+
+    cut = ModelResponse(content=[tool_use("publish_story", {"headline": "Prices fall"}, "t1")],
+                        stop_reason="max_tokens", usage=TokenUsage(input_tokens=1, output_tokens=1),
+                        model="fake-model")  # fmt: skip
+    story = write_story(briefing, WRITER, FakeLLM([cut]))
+    assert story.written_by == "template" and "max_tokens" in story.problems[0]
+
+
+def test_explanations_with_causal_wording_are_not_published(briefing) -> None:
+    from gridagent.monitor.explain import explain_events
+
+    causal = "The main driver was very strong wind, which pushed prices down due to low demand."
+    llm = lambda: FakeLLM([[text(causal)]])  # noqa: E731
+    energy_qa = resolve(AGENTS, "energy_qa@0.11.0")
+    explain_events(briefing, energy_qa, llm, FixtureDataSource(FIXTURE_DIR), date(2026, 10, 30),
+                   max_cost_usd=1.0)  # fmt: skip
+    first = briefing.events[0]
+    assert first.explanation is None and "due to" in first.explanation_problems[0]
