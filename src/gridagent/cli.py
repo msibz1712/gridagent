@@ -758,54 +758,28 @@ def brief(
     from datetime import timedelta
 
     from gridagent.data.client import EnergyChartsError, NoDataError
-    from gridagent.monitor.daily import build_briefing
-    from gridagent.monitor.explain import explain_events, save_briefing
+    from gridagent.monitor.run import run_briefing
+    from gridagent.monitor.writer import NewsStory
 
     now = date.fromisoformat(today) if today else berlin_today()
     reviewed = date.fromisoformat(day) if day else now - timedelta(days=1)
     data = build_data(fixtures, FIXTURE_DIR, _path("GARDEN_CACHE_DIR", ".cache"), _db_url())
-    try:
-        briefing = build_briefing(data, reviewed, now)
-    except (NoDataError, EnergyChartsError) as exc:
-        console.print(f"[red]No briefing for {reviewed}:[/] {exc}")
-        raise typer.Exit(code=1) from exc
-
     if explain and not os.environ.get("ANTHROPIC_API_KEY"):
         console.print("[yellow]ANTHROPIC_API_KEY not set: briefing without explanations; "
                       "the story is the template version.[/]")  # fmt: skip
         explain = False
-    if explain:
-        loaded = resolve(_agents_dir(), "energy_qa")
-        log_path = _path("GARDEN_LOG_DIR", "logs") / "runs.jsonl"
-        with console.status("Explaining the biggest price events..."):
-            explain_events(briefing, loaded, lambda: build_llm(loaded.config), data, now,
-                           max_cost, on_run=lambda log: append_run_log(log_path, log))  # fmt: skip
-
-    from gridagent.monitor.writer import NewsStory, template_story, write_story
-
-    if explain:
-        writer = resolve(_agents_dir(), "news_writer")
-        with console.status("Writing the story..."):
-            story = write_story(briefing, writer, build_llm(writer.config))
-        briefing.cost_usd = round(briefing.cost_usd + story.cost_usd, 4)
-    else:
-        story = template_story(briefing)
-        # A run without the model never replaces what the model already wrote for this day:
-        # the figures are calculated in code, so an earlier story and its explanations still fit.
-        earlier_file = _path("GARDEN_REPORTS_DIR", "reports") / "briefings" / f"{reviewed}.json"
-        if earlier_file.is_file():
-            earlier = json.loads(earlier_file.read_text())
-            if (earlier.get("story") or {}).get("written_by") == "model":
-                story = NewsStory(**earlier["story"])
-                old = {(e["kind"], e.get("from_hour")): e for e in earlier.get("events", [])}
-                for event in briefing.events:
-                    match = old.get((event.kind, event.from_hour))
-                    if match and match.get("explanation"):
-                        event.explanation = match["explanation"]
-                        event.explanation_steps = match.get("explanation_steps", [])
-    briefing.story = story.model_dump()
-
-    path = save_briefing(_path("GARDEN_REPORTS_DIR", "reports") / "briefings", briefing)
+    try:
+        with console.status("Building the briefing..."):
+            briefing, path = run_briefing(
+                data, reviewed, now, agents_dir=_agents_dir(),
+                reports_dir=_path("GARDEN_REPORTS_DIR", "reports"),
+                log_path=_path("GARDEN_LOG_DIR", "logs") / "runs.jsonl",
+                use_model=explain, max_cost_usd=max_cost, build_llm=build_llm,
+            )  # fmt: skip
+    except (NoDataError, EnergyChartsError) as exc:
+        console.print(f"[red]No briefing for {reviewed}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    story = NewsStory(**briefing.story)
     by = "the model" if story.written_by == "model" else "the template"
     console.print(Panel("\n\n".join([story.standfirst, *story.paragraphs]),
                         title=story.headline, subtitle=f"written by {by}"))  # fmt: skip

@@ -17,13 +17,15 @@ Configuration (environment variables):
 """
 
 import os
+import threading
+import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -31,13 +33,24 @@ from gridagent import __version__, services
 from gridagent.agent.config import AgentConfigError, LoadedAgent
 from gridagent.agent.conversation import ConversationLimitError, ConversationStore
 from gridagent.agent.runlog import RunLog
-from gridagent.data.client import berlin_today
+from gridagent.data.client import EnergyChartsError, NoDataError, berlin_today
 from gridagent.evals.runner import estimate_live_cost
 from gridagent.evals.session import load_agent_eval_set
 from gridagent.garden.registry import resolve
+from gridagent.monitor.run import run_briefing
+from gridagent.site.build import build_site
 from gridagent.tools.toolbox import ToolBox
 
 STATIC_DIR = Path(__file__).parent / "static"
+AUTO_BRIEFING_EVERY_SECONDS = 30 * 60
+DAILY_AI_WORST_CASE_USD = 0.05  # explanations (limited to 0.03) plus the story
+WAIT_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="10"><title>GridAgent: updating</title>
+<link rel="stylesheet" href="/dashboard/style.css"></head>
+<body><main class="wrap hero"><p class="eyebrow">GridAgent</p><h1>Updating the briefing.</h1>
+<p class="lead">This takes up to two minutes. The page reloads by itself and shows the new
+briefing when it is ready.</p></main></body></html>"""
 
 EXAMPLES = [
     "What share of Germany's electricity came from wind last week?",
@@ -70,6 +83,14 @@ class Settings:
         default_factory=lambda: float(os.environ.get("GARDEN_UI_BUDGET_USD", "1.00"))
     )
     max_turns: int = 10  # questions per conversation
+    reports_dir: Path = field(default_factory=lambda: _env("GARDEN_REPORTS_DIR", "reports"))
+    # Daily briefing in the background (live data only): every 30 minutes, check whether
+    # yesterday's briefing exists, and build it if not. With a key and GARDEN_DAILY_AI=1
+    # the model writes the story (~$0.005 a day, counted against the budget).
+    auto_briefing: bool = field(
+        default_factory=lambda: os.environ.get("GARDEN_AUTO_BRIEFING", "1") == "1"
+    )
+    daily_ai: bool = field(default_factory=lambda: os.environ.get("GARDEN_DAILY_AI", "1") == "1")
 
 
 def _env(name: str, default: str) -> Path:
@@ -161,10 +182,82 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Forget a conversation now (the "New conversation" button), not after 30 minutes."""
         conversations.delete(conversation_id)
 
+    # ---------- the dashboard: the briefing as pages, rebuilt after every run ----------
+
+    site_dir = settings.cache_dir / "site"
+    site_dir.mkdir(parents=True, exist_ok=True)
+    refreshing = threading.Lock()
+
+    def refresh(reviewed: date | None = None) -> str:
+        """Build (or rebuild) a briefing and the dashboard. Returns what happened."""
+        if not refreshing.acquire(blocking=False):
+            return "A briefing is already being built."
+        try:
+            today = berlin_today()
+            day = reviewed or today - timedelta(days=1)
+            use_model = (settings.daily_ai and bool(os.environ.get("ANTHROPIC_API_KEY"))
+                         and budget.allows_another_call(DAILY_AI_WORST_CASE_USD))  # fmt: skip
+            briefing, _ = run_briefing(
+                data, day, today, agents_dir=settings.agents_dir,
+                reports_dir=settings.reports_dir, log_path=settings.log_path,
+                use_model=use_model, max_cost_usd=0.03, build_llm=services.build_llm,
+            )  # fmt: skip
+            budget.add(briefing.cost_usd)
+            build_site(settings.reports_dir / "briefings", site_dir, ai_story=True, app=True)
+            return f"Briefing for {day} ready."
+        except (NoDataError, EnergyChartsError, FileNotFoundError) as exc:
+            return f"No briefing yet: {exc}"
+        finally:
+            refreshing.release()
+
+    def rebuild_pages() -> None:
+        try:
+            build_site(settings.reports_dir / "briefings", site_dir, ai_story=True, app=True)
+        except FileNotFoundError:
+            pass  # no briefing yet
+
+    def daily_loop() -> None:
+        while True:
+            yesterday = berlin_today() - timedelta(days=1)
+            if not (settings.reports_dir / "briefings" / f"{yesterday}.json").is_file():
+                refresh(yesterday)
+            time.sleep(AUTO_BRIEFING_EVERY_SECONDS)
+
+    rebuild_pages()  # pages for briefings made elsewhere (e.g. `garden brief`)
+    if settings.auto_briefing and not settings.use_fixtures:
+        threading.Thread(target=daily_loop, name="daily-briefing", daemon=True).start()
+    app.state.refresh = refresh  # for tests
+
+    @app.post("/refresh", include_in_schema=False)
+    def refresh_now() -> RedirectResponse:
+        """Start a briefing in the background (it can take a minute or two) and show a page
+        that reloads itself until it is done: no waiting on a hanging button, no JavaScript."""
+
+        def run() -> None:
+            app.state.last_refresh = app.state.refresh()
+
+        if not refreshing.locked():
+            app.state.refresh_thread = threading.Thread(target=run, daemon=True)
+            app.state.refresh_thread.start()
+        return RedirectResponse("/refresh/wait", status_code=303)
+
+    @app.get("/refresh/wait", include_in_schema=False, response_model=None)
+    def refresh_wait() -> HTMLResponse | RedirectResponse:
+        thread = getattr(app.state, "refresh_thread", None)
+        if thread is None or not thread.is_alive():
+            return RedirectResponse("/", status_code=303)
+        return HTMLResponse(WAIT_PAGE)
+
+    app.mount("/dashboard", StaticFiles(directory=site_dir, html=True), name="dashboard")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
+    def index() -> RedirectResponse:
+        """The dashboard when a briefing exists, otherwise the chat."""
+        return RedirectResponse("/dashboard/" if (site_dir / "index.html").is_file() else "/ask")
+
+    @app.get("/ask", include_in_schema=False)
+    def chat() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
     return app

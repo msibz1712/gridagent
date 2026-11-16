@@ -223,7 +223,9 @@ def template_story(briefing: Briefing) -> NewsStory:
     figures = {f.name: f for f in briefing.figures}
     lead = briefing.events[0] if briefing.events else None
     price = figures.get("Average day-ahead price")
-    headline = lead.title if lead else "A quiet day on the German power market"
+    from gridagent.monitor.captions import headline as short_headline
+
+    headline = short_headline(lead)  # a short, complete headline, never a cut-off sentence
     if len(headline) > HEADLINE_MAX:
         headline = headline[: HEADLINE_MAX - 1].rsplit(" ", 1)[0] + "…"
     standfirst = (f"The average day-ahead price was {price.value:.2f} EUR/MWh, against "

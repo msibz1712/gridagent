@@ -17,7 +17,7 @@ a { color: var(--blue); text-decoration: none; } a:hover { text-decoration: unde
 .eyebrow { margin: 0 0 18px; font-size: 13px; font-weight: 600; letter-spacing: .14em;
   text-transform: uppercase; color: var(--muted); }
 h1, h2 { font-family: var(--display); font-weight: 800; letter-spacing: -.04em; margin: 0; }
-h1 { font-size: clamp(40px, 7vw, 96px); line-height: .98; max-width: 1000px; }
+h1 { font-size: clamp(34px, 4.6vw, 64px); line-height: 1.02; max-width: 1040px; }
 h2 { font-size: clamp(32px, 4.4vw, 56px); line-height: 1.03; max-width: 880px; }
 h3 { margin: 0; }
 .lead { margin: 28px 0 0; max-width: 760px; font-size: clamp(18px, 1.8vw, 23px); line-height: 1.45;
@@ -31,16 +31,22 @@ h3 { margin: 0; }
 .top .brand { font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: -.02em; color: var(--ink); margin-right: 8px; }
 .top .fine { margin-left: auto; }
 
+.refresh { margin: 0; }
+.refresh button { font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 16px;
+  border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+.refresh button:hover { border-color: var(--ink); }
+
 /* hero and story */
-.hero { padding-top: 104px; padding-bottom: 64px; }
-.story { max-width: 720px; margin-top: 36px; font-size: 18px; line-height: 1.6; color: var(--ink-2); }
+.hero { padding-top: 64px; padding-bottom: 40px; }
+.story { max-width: 720px; margin-top: 20px; font-size: 17px; line-height: 1.6; color: var(--ink-2); }
+.story summary { font-size: 15px; margin-bottom: 14px; }
 .story p { margin: 0 0 18px; }
 .brief { padding-left: 18px; margin: 8px 0 18px; font-size: 16px; }
 .label { display: inline-block; margin-top: 8px !important; font-size: 12px; color: var(--muted);
   border: 1px solid var(--line); border-radius: 14px; padding: 3px 12px; }
 
 /* key figures */
-.kpis { display: flex; flex-wrap: wrap; gap: 0 40px; padding-bottom: 112px; }
+.kpis { display: flex; flex-wrap: wrap; gap: 0 40px; padding-bottom: 96px; }
 .kpi { flex: 1 1 230px; min-width: 0; border-top: 1px solid var(--ink); padding: 18px 0 6px; }
 .kpi h3 { font-size: 13px; font-weight: 500; color: var(--muted); }
 .kpi-value { margin: 12px 0 0; font-size: 15px; color: var(--muted); }
@@ -79,7 +85,7 @@ figcaption span { font-weight: 400; color: var(--muted); }
 /* sections */
 .section { padding-top: 112px; padding-bottom: 96px; }
 .tint { background: var(--tint); }
-.events { list-style: none; margin: 0 0 32px; padding: 0; display: grid; gap: 16px; }
+.events { list-style: none; margin: 40px 0 32px; padding: 0; display: grid; gap: 16px; }
 .events li { background: #fff; border-radius: 18px; padding: 24px 28px; }
 .events h3 { font-family: var(--display); font-size: 22px; letter-spacing: -.02em; }
 .events p { margin: 8px 0 0; color: var(--ink-2); font-size: 15px; }

@@ -44,6 +44,8 @@ def settings(tmp_path: Path) -> Settings:
         cache_dir=tmp_path / "cache",
         fixture_dir=FIXTURE_DIR,
         budget_usd=1.0,
+        reports_dir=tmp_path / "reports",  # never the real briefings
+        auto_briefing=False,
     )
 
 
@@ -255,3 +257,59 @@ def test_delete_conversation(client: TestClient, monkeypatch: pytest.MonkeyPatch
         json={"question": "Average price yesterday?", "conversation_id": conversation_id},
     ).json()
     assert again["new_conversation"] is True
+
+
+# ---------- the dashboard ----------
+
+
+def saved_briefing(reports_dir: Path) -> None:
+    from datetime import date
+
+    from gridagent.data.fixture_source import FixtureDataSource
+    from gridagent.monitor.daily import build_briefing
+    from gridagent.monitor.explain import save_briefing
+
+    b = build_briefing(FixtureDataSource(FIXTURE_DIR), date(2026, 10, 29),
+                       today=date(2026, 10, 30), history={})  # fmt: skip
+    save_briefing(reports_dir / "briefings", b)
+
+
+def test_home_is_the_chat_until_a_briefing_exists(client: TestClient) -> None:
+    page = client.get("/")
+    assert page.url.path == "/ask" and "<title>GridAgent" in page.text
+
+
+def test_home_is_the_dashboard_with_ask_and_refresh(settings: Settings) -> None:
+    saved_briefing(settings.reports_dir)
+    client = TestClient(create_app(settings))
+    page = client.get("/")
+    assert page.url.path == "/dashboard/" and "Daily briefing" in page.text
+    assert 'href="/ask"' in page.text and 'action="/refresh"' in page.text
+    assert client.get("/dashboard/days/2026-10-29.html").status_code == 200
+    assert 'href="/dashboard/"' in client.get("/ask").text  # and back from the chat
+
+
+def test_refresh_runs_in_the_background_with_a_self_reloading_wait_page(
+    settings: Settings,
+) -> None:
+    import threading
+
+    app = create_app(settings)
+    release, calls = threading.Event(), []
+
+    def slow_refresh() -> str:
+        calls.append(1)
+        release.wait(5)
+        return "Briefing ready."
+
+    app.state.refresh = slow_refresh
+    client = TestClient(app)
+    response = client.post("/refresh", follow_redirects=False)
+    assert response.status_code == 303 and response.headers["location"] == "/refresh/wait"
+    wait = client.get("/refresh/wait", follow_redirects=False)
+    assert wait.status_code == 200 and 'http-equiv="refresh"' in wait.text
+    release.set()
+    app.state.refresh_thread.join(5)
+    done = client.get("/refresh/wait", follow_redirects=False)
+    assert done.status_code == 303 and done.headers["location"] == "/"
+    assert calls == [1] and app.state.last_refresh == "Briefing ready."

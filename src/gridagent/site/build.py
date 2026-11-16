@@ -134,12 +134,13 @@ def _lead(b: dict[str, Any], ai_story: bool) -> str:
                  if story["written_by"] == "model" else "Written by code from the data")  # fmt: skip
         body = "".join(f"<p>{esc(p)}</p>" for p in story["paragraphs"])
         brief = "".join(f"<li>{esc(i)}</li>" for i in story.get("in_brief", []))
+        # Dashboard first: headline and summary up top, the full story one click away.
         return f"""<section class="wrap hero">
   <p class="eyebrow">Daily briefing · {esc(_day(b["day"]))}</p>
   <h1>{esc(story["headline"])}</h1>
   <p class="lead">{esc(story["standfirst"])}</p>
-  <div class="story">{body}{f'<ul class="brief">{brief}</ul>' if brief else ""}
-    <p class="label">{esc(label)}</p></div>
+  <details class="story"><summary>Read the full story</summary>{body}{f'<ul class="brief">{brief}</ul>' if brief else ""}</details>
+  <p class="label">{esc(label)}</p>
 </section>"""
     lead = Story(**b["events"][0]) if b["events"] else None
     return f"""<section class="wrap hero">
@@ -297,8 +298,13 @@ def _nrw(b: dict[str, Any]) -> str:
 </section>"""  # noqa: E501
 
 
-def page(b: dict[str, Any], ai_story: bool, root: str, days: list[str]) -> str:
-    """One briefing as a complete page. `root` is the path back to the site root."""
+APP_LINKS = """<a href="/ask">Ask</a>
+  <form class="refresh" method="post" action="/refresh"><button type="submit">Refresh briefing</button></form>"""
+
+
+def page(b: dict[str, Any], ai_story: bool, root: str, days: list[str], app: bool = False) -> str:
+    """One briefing as a complete page. `root` is the path back to the site root. `app`: served
+    by the local web app, so the menu gets Ask (the chat) and a Refresh button."""
     i = days.index(b["day"]) if b["day"] in days else -1
     newer = days[i - 1] if i > 0 else None
     older = days[i + 1] if 0 <= i < len(days) - 1 else None
@@ -319,6 +325,7 @@ def page(b: dict[str, Any], ai_story: bool, root: str, days: list[str]) -> str:
 <header class="top"><nav class="wrap">
   <a class="brand" href="{root}index.html">{SITE_NAME}</a>
   <a href="{root}index.html">Today</a><a href="{root}archive.html">Archive</a><a href="#nrw">NRW</a><a href="{root}about.html">About</a>
+  {APP_LINKS if app else ""}
   <span class="fine">Data through {esc(_day(b["day"]))}</span>
 </nav></header>
 <main>
@@ -397,7 +404,11 @@ def archive(days: list[str]) -> str:
 
 
 def build_site(
-    briefings_dir: Path, out_dir: Path, ai_story: bool = False, legal_notice: str | None = None
+    briefings_dir: Path,
+    out_dir: Path,
+    ai_story: bool = False,
+    legal_notice: str | None = None,
+    app: bool = False,
 ) -> list[str]:
     """Write the whole site; returns the days built, newest first."""
     files = sorted(briefings_dir.glob("????-??-??.json"), reverse=True)
@@ -425,12 +436,12 @@ def build_site(
             public = {**b, "story": None,
                       "events": [{**e, "explanation": None, "explanation_steps": []}
                                  for e in b["events"]]}  # fmt: skip
-        (out_dir / "days" / f"{b['day']}.html").write_text(page(public, ai_story, "../", days))
+        (out_dir / "days" / f"{b['day']}.html").write_text(page(public, ai_story, "../", days, app))
         (out_dir / "data" / f"{b['day']}.json").write_text(
             json.dumps(public, ensure_ascii=False, indent=1)
         )
     latest = briefings[0] if ai_story else {**briefings[0], "story": None}
-    (out_dir / "index.html").write_text(page(latest, ai_story, "", days))
+    (out_dir / "index.html").write_text(page(latest, ai_story, "", days, app))
     (out_dir / "archive.html").write_text(archive(days))
     (out_dir / "about.html").write_text(about("", legal_notice))
     if skipped:
