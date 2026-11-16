@@ -21,8 +21,10 @@ from gridagent.data.provider import DataProvider
 from gridagent.data.sources import source_series
 from gridagent.monitor.anomalies import Story, day_stories, load_history
 from gridagent.monitor.forecasts import Outlook, outlook
+from gridagent.monitor.nrw import nrw_snapshot
 from gridagent.tools.flexibility import Battery, simulate_battery
 from gridagent.tools.investigate import BERLIN, hourly
+from gridagent.tools.register import PlantRegister
 
 WINDOW_DAYS = 28
 MAX_STORIES = 6  # the lead and up to five shorter items
@@ -66,6 +68,7 @@ class DayPlan(BaseModel):
     dearest_price: float
     negative_hours: float
     battery_profit_eur_per_mw: float  # 1 MW / 2 MWh, 90 % round trip
+    hourly_prices: list[float] = []  # local hours 0..23 (for the chart)
 
 
 class Briefing(BaseModel):
@@ -78,6 +81,9 @@ class Briefing(BaseModel):
     not_available: list[str] = []
     sources: list[str]
     cost_usd: float = 0.0
+    # For charts: one entry per day of the 4 weeks before and the day itself
+    daily: list[dict[str, Any]] = []
+    nrw: dict[str, Any] | None = None  # plant register snapshot (monitor/nrw.py)
     story: dict[str, Any] | None = None  # the news story (monitor/writer.py)
 
 
@@ -235,6 +241,7 @@ def day_plan(day: date, prices: Series, block_hours: int = 3) -> DayPlan | None:
         dearest_price=round(dear[1] or 0, 2),
         negative_hours=sum(v < 0 for v in values) * (prices.interval_minutes or 60) / 60,
         battery_profit_eur_per_mw=battery["profit_eur_per_mw"],
+        hourly_prices=[round(hours[(day, h)], 2) for h in keys],
     )
 
 
@@ -278,9 +285,21 @@ def build_briefing(data: DataProvider, day: date, today: date,
         plan = day_plan(plan_day, future)
         if plan is not None:
             plans.append(plan)
+    daily = [
+        {"date": d.isoformat(), **{k: round(v, 2) for k, v in history[d].items()}}
+        for d in sorted(history)
+        if start <= d <= day
+    ]
+    try:
+        nrw = nrw_snapshot(PlantRegister(data.plant_register()), day)
+    except (NoDataError, EnergyChartsError, KeyError, ValueError):
+        nrw = None
+        not_available.append("plant register")
     return Briefing(
         day=day.isoformat(),
         generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        daily=daily,
+        nrw=nrw,
         figures=figures,
         events=events,
         plans=plans,

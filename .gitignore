@@ -26,3 +26,6 @@ reports/*
 .DS_Store
 .vscode/
 .idea/
+
+# Built public website (garden site build); published by the GitHub Action
+site/

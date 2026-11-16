@@ -850,3 +850,27 @@ def anomalies(
             )
             console.print(f"  {story.score:.2f}  {story.kind:<15} {story.title}{tag}")
         day += timedelta(days=1)
+
+
+site_app = typer.Typer(help="The public website: static pages from the saved briefings.")
+app.add_typer(site_app, name="site")
+
+
+@site_app.command("build")
+def site_build(
+    out: Annotated[Path, typer.Option(help="Folder to write the site to.")] = Path("site"),
+    ai_story: Annotated[
+        bool, typer.Option(help="Show the AI-written story and investigations (labelled).")
+    ] = True,
+) -> None:
+    """Build the public pages from reports/briefings (static: no server, no database)."""
+    from gridagent.site.build import build_site
+
+    briefings = _path("GARDEN_REPORTS_DIR", "reports") / "briefings"
+    try:
+        days = build_site(briefings, out, ai_story=ai_story)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"Built {len(days)} day(s) into {out}/ (latest: {days[0]}; "
+                  f"AI story {'on' if ai_story else 'off'}).")  # fmt: skip
