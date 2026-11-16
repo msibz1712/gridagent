@@ -1,0 +1,84 @@
+# Every morning: yesterday's briefing -> archive branch -> static site -> GitHub Pages.
+#
+# Settings (repository Settings -> Secrets and variables -> Actions):
+#   secrets   DATABASE_URL_READER  read-only database role (never the owner URL)
+#             ANTHROPIC_API_KEY    only needed when AI_STORY is "true" (~$0.005 per day)
+#   variables SITE_LEGAL_NOTICE    name, address, e-mail: the site is not published without it
+#             AI_STORY             "true" (labelled AI story and investigations) or "false"
+# The briefings are kept on the branch `briefings`, so the archive is versioned in git.
+name: Daily briefing site
+
+on:
+  schedule:
+    - cron: "30 5 * * *"  # 06:30 in Germany in winter, 07:30 in summer
+  workflow_dispatch:
+
+permissions:
+  contents: write  # push the new briefing to the `briefings` branch
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daily-site
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GARDEN_REPORTS_DIR: archive
+      AI_STORY: ${{ vars.AI_STORY || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load the archive (branch `briefings`)
+        run: |
+          if git ls-remote --exit-code --heads origin briefings >/dev/null; then
+            git fetch --depth 1 origin briefings
+            git worktree add archive origin/briefings
+          else
+            mkdir -p archive/briefings  # first run: the branch is created below
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --extra db
+
+      - name: Yesterday's briefing
+        env:
+          DATABASE_URL_READER: ${{ secrets.DATABASE_URL_READER }}
+          ANTHROPIC_API_KEY: ${{ env.AI_STORY == 'true' && secrets.ANTHROPIC_API_KEY || '' }}
+        run: |
+          if [ "$AI_STORY" = "true" ]; then explain=--explain; else explain=--no-explain; fi
+          uv run garden brief $explain --max-cost 0.03
+
+      - name: Save the briefing to the archive
+        working-directory: archive
+        run: |
+          [ -e .git ] || git init -q -b briefings  # first run only; a worktree has .git
+          git config user.name "gridagent-bot"
+          git config user.email "gridagent-bot@users.noreply.github.com"
+          git add briefings
+          git commit -q -m "Briefing $(date -u -d yesterday +%F)" || echo "nothing new"
+          git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/briefings
+
+      - name: Build the site
+        env:
+          SITE_LEGAL_NOTICE: ${{ vars.SITE_LEGAL_NOTICE }}
+        run: |
+          if [ "$AI_STORY" = "true" ]; then ai=--ai-story; else ai=--no-ai-story; fi
+          uv run garden site build --out site $ai --require-legal-notice
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

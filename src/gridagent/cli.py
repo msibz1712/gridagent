@@ -862,13 +862,21 @@ def site_build(
     ai_story: Annotated[
         bool, typer.Option(help="Show the AI-written story and investigations (labelled).")
     ] = True,
+    require_legal_notice: Annotated[
+        bool, typer.Option(help="Fail without SITE_LEGAL_NOTICE (for publishing).")
+    ] = False,
 ) -> None:
     """Build the public pages from reports/briefings (static: no server, no database)."""
     from gridagent.site.build import build_site
 
+    legal_notice = os.environ.get("SITE_LEGAL_NOTICE", "").strip() or None
+    if require_legal_notice and not legal_notice:
+        console.print("[red]SITE_LEGAL_NOTICE is not set:[/] a public site needs a legal "
+                      "notice (name, address, e-mail). Not publishing.")  # fmt: skip
+        raise typer.Exit(code=1)
     briefings = _path("GARDEN_REPORTS_DIR", "reports") / "briefings"
     try:
-        days = build_site(briefings, out, ai_story=ai_story)
+        days = build_site(briefings, out, ai_story=ai_story, legal_notice=legal_notice)
     except FileNotFoundError as exc:
         console.print(f"[red]{exc}[/]")
         raise typer.Exit(code=1) from exc

@@ -102,3 +102,29 @@ def test_redispatch_never_reaches_the_public_site(site) -> None:
     build_site(briefings, out, ai_story=True)
     for path in [*out.rglob("*.html"), *out.rglob("*.json")]:
         assert "redispatch" not in path.read_text().lower(), path
+
+
+def test_the_publishing_workflow_is_safe() -> None:
+    """Read-only database role only, legal notice required, AI only when switched on."""
+    from pathlib import Path
+
+    import yaml
+
+    workflow = Path(__file__).parent.parent / ".github" / "workflows" / "daily-site.yml"
+    text = workflow.read_text()
+    jobs = yaml.safe_load(text)["jobs"]
+    assert "secrets.DATABASE_URL_READER" in text and "secrets.DATABASE_URL }}" not in text
+    assert "--require-legal-notice" in text
+    assert "vars.AI_STORY || 'false'" in text  # AI text is opt-in
+    assert jobs["deploy"]["needs"] == "build"
+
+
+def test_cli_refuses_to_build_a_public_site_without_legal_notice(tmp_path, monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    from gridagent.cli import app
+
+    monkeypatch.delenv("SITE_LEGAL_NOTICE", raising=False)
+    result = CliRunner().invoke(app, ["site", "build", "--out", str(tmp_path),
+                                      "--require-legal-notice"])  # fmt: skip
+    assert result.exit_code == 1 and "legal notice" in result.output
