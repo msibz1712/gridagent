@@ -34,6 +34,7 @@ number; the design is about preventing exactly that.
 | Story | Yesterday's lead story, written by the news-writer agent from calculated figures and checked number by number (labelled as AI-written; one click to the full text) |
 | Key figures | Price, renewable share, wind, peak residual load, each against its four-week normal with a trend line |
 | Today | Hourly day-ahead prices, the cheapest and dearest three hours, what a 1 MW / 2 MWh battery could earn |
+| Tomorrow's price | GridAgent's own forecast before the auction, with its recent error; the published result next to it afterwards |
 | The week ahead | Expected wind and solar energy and temperature for seven days, each labelled *reliable* or *rough indication* from measured forecast accuracy |
 | The last four weeks | Price and wind, day by day |
 | What stood out | Price spikes and dips (explained by residual load, or not), records, streaks, unusual changes, forecast misses |
@@ -58,8 +59,8 @@ number; the design is about preventing exactly that.
 | Power plants | "How much onshore wind was added in NRW districts since 2023?" |
 | Official figures | "What was the official renewable share in 2025?" |
 
-It reports published forecasts with their reliability but makes no predictions of its own,
-gives no investment or trading advice, and declines anything off-topic. Follow-up questions
+It reports published forecasts with their reliability, gives no investment or trading
+advice, and declines anything off-topic. Follow-up questions
 build on the conversation.
 
 ## How it works
@@ -170,6 +171,23 @@ forecast-skill`, Sep–Nov 2026, daily forecast against actual daily output):
 | Solar (r) | 0.97 | 0.96 | 0.94 | 0.93 | 0.87 | 0.81 | 0.85 |
 
 For tomorrow, the grid operators' own forecast is better still (r 0.993) and is used instead.
+
+**GridAgent's own price forecast for tomorrow** (`garden price-backtest`) is made only from
+what is known before the noon auction the day before: wind and solar forecasts issued two
+days ahead (a one-day lead would look past the auction for evening hours), demand of the
+same hour a week earlier, and a merit-order curve fitted on the four weeks before. A test
+proves that the target day and the day before cannot influence it. Backtest, 1 October to
+15 November 2026:
+
+| Forecast | Error per hour (EUR/MWh) |
+|---|---|
+| **GridAgent** | **31.6** |
+| Same hour, the day before | 44.6 |
+| Same hour, a week before | 77.6 |
+
+29% better than the best simple rule; daily averages correlate at r 0.912. The dashboard
+shows the forecast with its recent error and, after the auction, the published result
+next to it.
 
 Things the evaluations and checks caught along the way, each now covered by a test: mental
 arithmetic in answers; a misrounded expected value in the eval set itself; a 4× undercount
@@ -294,8 +312,9 @@ tests/                   538 tests; independent reference calculations; recorded
 
 ## Limits and responsible use
 
-- **Germany and its neighbours.** Past data, plus published day-ahead prices and published
-  forecasts with their reliability; no predictions of its own, no investment or trading advice.
+- **Germany and its neighbours.** Past data, published day-ahead prices and forecasts with
+  their measured reliability, and one forecast of its own (tomorrow's price, backtested
+  against simple rules); no investment or trading advice.
 - **Preliminary data:** recent values are revised by the publishers; official figures are
   labelled final, preliminary, estimated or reported.
 - **Associations, not causes.** Weather, residual load and anomaly results describe what
@@ -308,8 +327,6 @@ tests/                   538 tests; independent reference calculations; recorded
 
 ## Next steps
 
-- A price forecast for tomorrow from the published forecasts, backtested against the
-  auction results and simple baselines.
 - Phone alerts (negative prices tomorrow, cheapest hours, spikes).
 - Battery value on intraday prices (the day-ahead result is an upper bound only).
 
