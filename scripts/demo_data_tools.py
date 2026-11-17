@@ -1,4 +1,4 @@
-"""M1 demo: answer the three example questions with the data tools only (no LLM).
+"""Demo: three example questions answered by the data tools alone (no model involved).
 
 Run:  uv run python scripts/demo_data_tools.py           # offline, from fixtures
       uv run python scripts/demo_data_tools.py --live    # real API (cached in .cache/)

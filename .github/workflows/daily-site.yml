@@ -32,7 +32,7 @@ jobs:
       GARDEN_REPORTS_DIR: archive
       AI_STORY: ${{ vars.AI_STORY || 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Load the archive (branch `briefings`)
         run: |
@@ -43,7 +43,7 @@ jobs:
             mkdir -p archive/briefings  # first run: the branch is created below
           fi
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10
       - run: uv sync --extra db
 
       - name: Yesterday's briefing

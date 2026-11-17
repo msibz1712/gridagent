@@ -252,7 +252,8 @@ uv run ruff check . && uv run mypy                 # lint and type check (both r
 uv run garden brief [--day 2026-11-15] [--no-explain]       # briefing (story by the model unless --no-explain)
 uv run garden today                                          # briefing + local page, opened in the browser
 uv run garden anomalies --start 2026-10-18 --end 2026-11-15  # backtest the anomaly engine (free)
-uv run garden forecast-skill --start 2026-09-01 --end 2026-11-14
+uv run garden forecast-skill --start 2026-09-01 --end 2026-11-14   # weather forecast accuracy by lead time
+uv run garden price-backtest --start 2026-10-01 --end 2026-11-15   # own price forecast vs simple rules
 
 # Agents and evaluations
 uv run garden list | validate | tools
@@ -296,18 +297,23 @@ writes a balanced municipality × year panel for research.
 ## Project layout
 
 ```
-agents/energy_qa/        analyst agent: versions (agent.yaml + system prompt), evals.yaml, recordings
-agents/news_writer/      news-writer agent: versions, the newsroom style guide, story evals
-src/gridagent/agent/     tool-use loop, conversations, run logs
-src/gridagent/tools/     tool definitions, ToolBox, statistics, investigator, battery, register, grounding
-src/gridagent/monitor/   daily briefing: figures, anomaly engine, forecasts, outlook, explanations, writer, captions
-src/gridagent/data/      API clients (Energy-Charts, SMARD, DWD, Open-Meteo, netztransparenz, MaStR), caching
-src/gridagent/db/        PostgreSQL schema, sync, database and hybrid data sources
-src/gridagent/evals/     eval sets, oracle/replay/live runner, scoring, story evals, reports
-src/gridagent/cli/       the `garden` command, one module per command group
-src/gridagent/site/      static dashboard pages (inline SVG charts, no scripts)
-src/gridagent/web/       FastAPI app: dashboard, chat, refresh, daily background briefing
-tests/                   538 tests; independent reference calculations; recorded API data
+agents/energy_qa/          analyst agent: versions (agent.yaml + system prompt), evals.yaml, recordings
+agents/news_writer/        news-writer agent: versions, the newsroom style guide, story evals
+src/gridagent/agent/       tool-use loop, conversations, run logs
+src/gridagent/llm/         Claude adapter (Anthropic SDK), scripted fake model, pricing
+src/gridagent/tools/       tool definitions, ToolBox, statistics, investigator, battery, register, grounding
+src/gridagent/monitor/     daily briefing: figures, anomaly engine, forecasts, outlook, explanations, writer
+src/gridagent/data/        API clients (Energy-Charts, SMARD, DWD, Open-Meteo, netztransparenz, MaStR), caching
+src/gridagent/db/          PostgreSQL schema, sync, database and hybrid data sources
+src/gridagent/evals/       eval sets, oracle/replay/live runner, scoring, story evals, reports
+src/gridagent/garden/      the Agent Garden: registry of versioned agents, scaffolding of new ones
+src/gridagent/cli/         the `garden` command, one module per command group
+src/gridagent/web/         FastAPI app: dashboard, chat, refresh, daily background briefing
+src/gridagent/site/        static dashboard pages (inline SVG charts, no scripts)
+src/gridagent/services.py  shared by CLI and web app: data and model setup, run logs, budgets
+tests/                     574 tests (91% coverage); independent reference calculations; recorded API data
+scripts/                   recording test fixtures; a demo of the data tools without a model
+templates/agent_template/  what `garden new` copies for a new agent
 ```
 
 ## Limits and responsible use

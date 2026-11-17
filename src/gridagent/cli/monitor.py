@@ -119,7 +119,7 @@ def anomalies(
         day += timedelta(days=1)
 
 
-site_app = typer.Typer(help="The public website: static pages from the saved briefings.")
+site_app = typer.Typer(help="The static dashboard: pages built from the saved briefings.")
 app.add_typer(site_app, name="site")
 
 

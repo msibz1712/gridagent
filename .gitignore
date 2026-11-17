@@ -12,6 +12,9 @@ build/
 # Tool caches
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
 # Local data cache for API responses (fixtures in tests/fixtures ARE committed)
 .cache/
@@ -27,7 +30,7 @@ reports/*
 .vscode/
 .idea/
 
-# Built public website (garden site build); published by the GitHub Action
+# Built static dashboard (garden site build)
 /site/
 
 # Personal notes (interview preparation): never published

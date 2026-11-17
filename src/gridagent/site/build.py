@@ -1,4 +1,4 @@
-"""The public website: static pages built from saved briefings (no server, no database).
+"""The static dashboard: pages built from saved briefings (no server, no database).
 
 `build_site` turns reports/briefings/*.json into:
     index.html              the latest briefing

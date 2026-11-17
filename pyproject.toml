@@ -1,7 +1,7 @@
 [project]
 name = "gridagent"
 version = "0.1.0"
-description = "An evaluated AI agent that answers questions about Germany's electricity system, plus a mini Agent Garden registry."
+description = "A daily market monitor for Germany's electricity system, built on two evaluated Claude agents (analyst and news writer) and a small versioned agent registry."
 readme = "README.md"
 authors = [
     { name = "msibz1712", email = "206462282+msibz1712@users.noreply.github.com" }
@@ -16,7 +16,7 @@ dependencies = [
     "typer>=0.29.1",
 ]
 
-# `uv run garden ...` calls the Typer app defined in src/gridagent/cli.py
+# `uv run garden ...` calls the Typer app in src/gridagent/cli/ (one module per command group)
 [project.scripts]
 garden = "gridagent.cli:app"
 

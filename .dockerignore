@@ -11,6 +11,10 @@ reports
 **/*.pyc
 .pytest_cache
 .ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+notes
 .github
 .vscode
 .idea
