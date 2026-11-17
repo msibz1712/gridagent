@@ -29,3 +29,6 @@ reports/*
 
 # Built public website (garden site build); published by the GitHub Action
 /site/
+
+# Personal notes (interview preparation): never published
+/notes/
