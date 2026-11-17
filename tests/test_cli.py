@@ -7,6 +7,8 @@ import pytest
 from typer.testing import CliRunner
 
 from gridagent import cli
+from gridagent.cli import agents as cli_agents
+from gridagent.cli import evals as cli_evals
 from gridagent.llm.fake import FakeLLM, text, tool_use
 
 runner = CliRunner()
@@ -37,7 +39,7 @@ def test_run_end_to_end_with_fake_model(monkeypatch: pytest.MonkeyPatch, tmp_pat
             [text("Average 161.73 EUR/MWh on 2026-11-13. Source: SMARD.de via Energy-Charts.info")],
         ]
     )
-    monkeypatch.setattr(cli, "build_llm", lambda cfg, model=None: fake)
+    monkeypatch.setattr(cli_agents, "build_llm", lambda cfg, model=None: fake)
 
     result = runner.invoke(
         cli.app,
@@ -111,7 +113,7 @@ def test_eval_offline_uses_oracle_and_writes_reports(
 def test_eval_min_pass_rate_fails_ci(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(ROOT)
     monkeypatch.setenv("GARDEN_REPORTS_DIR", str(tmp_path))
-    monkeypatch.setattr(cli, "evaluate", _fake_evaluate_with_pass_rate(0.5))
+    monkeypatch.setattr(cli_evals, "evaluate", _fake_evaluate_with_pass_rate(0.5))
     result = runner.invoke(cli.app, ["eval", "energy_qa", "--min-pass-rate", "0.9"])
     assert result.exit_code == 1
     assert "below" in result.output
@@ -132,7 +134,7 @@ def test_eval_live_asks_before_spending(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.chdir(ROOT)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
     called = []
-    monkeypatch.setattr(cli, "evaluate", lambda *a, **k: called.append(1))
+    monkeypatch.setattr(cli_evals, "evaluate", lambda *a, **k: called.append(1))
     result = runner.invoke(cli.app, ["eval", "energy_qa", "--live"], input="n\n")
     assert result.exit_code == 0
     assert "estimated cost about $" in result.output
@@ -163,7 +165,7 @@ def test_compare_two_versions_offline(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 def test_ui_explains_missing_extra(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(cli_agents.importlib.util, "find_spec", lambda name: None)
     result = runner.invoke(cli.app, ["ui"])
     assert result.exit_code == 1
     assert "--extra web" in result.output
@@ -199,7 +201,7 @@ def test_chat_keeps_the_conversation(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
     monkeypatch.setenv("GARDEN_LOG_DIR", str(tmp_path))
     fake = FakeLLM([[text("Wind was 23.3%.")], [text("Solar was 7.74%.")], [text("Fresh start.")]])
-    monkeypatch.setattr(cli, "build_llm", lambda cfg, model=None: fake)
+    monkeypatch.setattr(cli_agents, "build_llm", lambda cfg, model=None: fake)
 
     result = runner.invoke(
         cli.app,

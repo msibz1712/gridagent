@@ -151,7 +151,10 @@ def test_failures_hide_internal_details(
     body = ask(client).json()
     assert body["status"] == "failed"
     assert body["answer"] == FAILED_ANSWER
-    assert "500" not in str(body) and "stack" not in str(body)
+    # Random ids and the timestamp can contain "500" by chance (a flaky test once): leave
+    # them out and check everything a user reads.
+    shown = {k: v for k, v in body.items() if k not in ("id", "conversation_id", "asked_at")}
+    assert "500" not in str(shown) and "stack" not in str(shown)
     assert body["steps"] == [] and body["charts"] == []
 
 

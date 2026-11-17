@@ -83,7 +83,7 @@ source = ["gridagent"]
 branch = false
 
 [tool.coverage.report]
-# 86% without the database tests (no local Postgres); CI runs those too. A drop below
+# CI (with the database tests): 90.6%; locally without Postgres: 86%. A drop below
 # the floor fails CI, so new code comes with tests.
 fail_under = 85
 skip_covered = true

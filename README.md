@@ -11,7 +11,7 @@ is checked automatically on every answer and every story.
 **At a glance:** 2 agents (analyst and news writer) · 20 tools · 73-question eval set ·
 **97.3%** live pass rate on the latest version (93.6–98.3% on every version since 0.4.0) ·
 **100%** of out-of-scope questions declined · about **$0.001 and 9 s per question**, about
-**$0.005 per daily briefing** · news writer: **94.1%** on 17 graded stories · 574 tests, 86% coverage, type-checked · CI that replays real model answers for free ·
+**$0.005 per daily briefing** · news writer: **94.1%** on 17 graded stories · 574 tests, 91% coverage, type-checked · CI that replays real model answers for free ·
 Docker · PostgreSQL (Supabase) with history since 2018 · runs on your own machine.
 
 ---
@@ -285,7 +285,8 @@ src/gridagent/tools/     tool definitions, ToolBox, statistics, investigator, ba
 src/gridagent/monitor/   daily briefing: figures, anomaly engine, forecasts, outlook, explanations, writer, captions
 src/gridagent/data/      API clients (Energy-Charts, SMARD, DWD, Open-Meteo, netztransparenz, MaStR), caching
 src/gridagent/db/        PostgreSQL schema, sync, database and hybrid data sources
-src/gridagent/evals/     eval set, oracle/replay/live runner, scoring, reports
+src/gridagent/evals/     eval sets, oracle/replay/live runner, scoring, story evals, reports
+src/gridagent/cli/       the `garden` command, one module per command group
 src/gridagent/site/      static dashboard pages (inline SVG charts, no scripts)
 src/gridagent/web/       FastAPI app: dashboard, chat, refresh, daily background briefing
 tests/                   538 tests; independent reference calculations; recorded API data
