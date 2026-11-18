@@ -341,3 +341,6 @@ templates/agent_template/  what `garden new` copies for a new agent
 Data: Energy-Charts.info (Fraunhofer ISE), Bundesnetzagentur | SMARD.de, Deutscher
 Wetterdienst and Open-Meteo, all CC BY 4.0; Marktstammdatenregister, © Bundesnetzagentur,
 dl-de/by-2-0. Built with the Claude API (Anthropic).
+
+Code: © msibz1712, all rights reserved. The repository is public so the work can be read
+and reviewed; please ask before reusing the code. The data keeps the licences above.
