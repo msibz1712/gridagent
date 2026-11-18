@@ -43,7 +43,7 @@ jobs:
             mkdir -p archive/briefings  # first run: the branch is created below
           fi
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3  # exact: setup-uv publishes no major tags since v8
       - run: uv sync --extra db
 
       - name: Yesterday's briefing
